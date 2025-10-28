@@ -12,6 +12,9 @@ import numpy as np
 from scipy.fft import rfft, rfftfreq
 from scipy.signal import get_window
 from pydub import AudioSegment
+import urllib.request
+import urllib.error
+import time
 
 # ------------------ defaults ------------------
 DEFAULTS = {
@@ -182,7 +185,11 @@ def run_glyphmodder_write(nglyph_path, ogg_path, title=None, cwd=None):
     if not os.path.isfile(glyphmodder_path):
         glyphmodder_path = os.path.normpath(os.path.join(os.getcwd(), "GlyphModder.py"))
     if not os.path.isfile(glyphmodder_path):
-        raise FileNotFoundError(f"GlyphModder.py not found in parent directory or working directory. Searched: {glyphmodder_path}")
+        print(f"GlyphModder.py not found in parent directory or working directory. Searched: {glyphmodder_path}")
+        print("Downloading GlyphModder.py from SebiAI's GitHub repository...")
+        download_glyphmodder_to_cwd(overwrite=1) 
+        print(f"[+] Proceeding with the downloaded GlyphModder.py from cwd.")
+        
 
     # ensure NGlyph is an absolute path (so GlyphModder can find it from any cwd)
     arg_nglyph = os.path.abspath(nglyph_path)
@@ -202,8 +209,57 @@ def run_glyphmodder_write(nglyph_path, ogg_path, title=None, cwd=None):
     print(f"[+] GlyphModder produced: {final_ogg_path}")
     return final_ogg_path
 
+# new helper: ensure GlyphModder.py exists in current directory (download from SebiAI if needed)
+def download_glyphmodder_to_cwd(overwrite=False, attempts=2, backoff=1.0):
+    """
+    Try to download GlyphModder.py from SebiAI's GitHub raw URLs into cwd.
+    If overwrite is False and a file already exists, do nothing.
+    Returns True on success (file now exists in cwd), False otherwise.
+    """
+    target = os.path.join(os.getcwd(), "GlyphModder.py")
+    if os.path.isfile(target) and not overwrite:
+        print(f"[+] GlyphModder.py already present in cwd: {target}")
+        return True
+
+    url = "https://raw.githubusercontent.com/SebiAi/custom-nothing-glyph-tools/main/GlyphModder.py"
+    last_err = None
+    for attempt in range(1, attempts + 1):
+        try:
+            print(f"[+] Downloading GlyphModder from SebiAi's repo (attempt {attempt}) ...")
+            with urllib.request.urlopen(url, timeout=10) as resp:
+                if resp.status != 200:
+                    raise urllib.error.HTTPError(url, resp.status, "Non-200 response", resp.headers, None)
+                data = resp.read()
+            # write atomically
+            tmp = target + ".tmp"
+            with open(tmp, "wb") as f:
+                f.write(data)
+            os.replace(tmp, target)
+            print(f"[+] Saved GlyphModder.py -> {target}")
+            return True
+        except Exception as e:
+            last_err = e
+            print(f"[!] Download attempt {attempt} failed: {e}")
+            time.sleep(backoff * attempt)
+    print(f"[!] Failed to download from github: {last_err}")
+    print("[!] Could not obtain GlyphModder.py from SebiAI's GitHub.")
+    return False
+
 # ------------------ entrypoint ------------------
 if __name__ == "__main__":
+    # accept optional --update flag to force overwriting GlyphModder.py from GitHub
+    update_flag = False
+    if "--update" in sys.argv:
+        update_flag = True
+
+    # Attempt to pull GlyphModder.py if --update
+    if update_flag:
+         try:
+            download_glyphmodder_to_cwd(overwrite=update_flag)
+         except Exception as e_download:
+            print(f"[!] Warning: automatic GlyphModder fetch failed: {e_download}")
+        # continue — run_glyphmodder_write will still search parent dir / cwd as before
+
     # Instead of a single input file, process all files in ./input and write to ./output
     input_dir = "Input"
     output_dir = "Output"
@@ -223,7 +279,7 @@ if __name__ == "__main__":
         os.makedirs(nglyph_dir, exist_ok=True)
 
     if not os.path.isfile(cfg_path):
-        print("zones.json not found in working directory.")
+        print("[!] zones.json not found in working directory.")
         sys.exit(1)
 
     conf = json.load(open(cfg_path, "r", encoding="utf-8"))
@@ -263,7 +319,7 @@ if __name__ == "__main__":
                     except Exception:
                         # fallback to copy+remove
                         import shutil
-                        shutil.copy2(final_ogg, desired_final_ogg)
+                        shutil.copy2(final_ogg, desired_final_gg)
                         os.remove(final_ogg)
             except Exception as e_move:
                 print(f"[!] Warning: couldn't rename GlyphModder output: {e_move}")
@@ -286,4 +342,4 @@ if __name__ == "__main__":
             except Exception:
                 pass
 
-    print(f"[+] Done. Processed {len(processed)} file(s): {processed}")
+    print(f"[+] Done. Processed {len(processed)} file(s): {processed}. Find them in the output folder!")
