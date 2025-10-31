@@ -1,7 +1,7 @@
 {
   "phone_model": "PHONE1",
   "fps": 60,
-  "decay_alpha": 0.9,
+  "decay_alpha": 0.8,
   "amp": {
     "min": 0.5,
     "max": 4.0,
