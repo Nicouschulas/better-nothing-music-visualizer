@@ -252,11 +252,10 @@ def generate_help_from_zones(cfg_path="zones.config"):
     # only support multi-config format: top-level "amp" and per-phone keys
     if "zones" in raw:
         return (f"Legacy single-config format detected in {cfg_path}.\n"
-                "This tool now requires a multi-config file with a top-level 'amp' and per-phone entries.\n"
-                "Example structure is in the repository. Aborting.")
-    global_amp = raw.get("amp", {})
-    conf_map = {k: v for k, v in raw.items() if k != "amp"}
-
+                "This tool now requires a multi-config file with per-phone entries.\n"
+                "Aborting.")
+    # only include entries that look like phone configs (dicts).  This filters out metadata like decay-alpha.
+    conf_map = {k: v for k, v in raw.items() if k != "amp" and isinstance(v, dict)}
     lines = []
     lines.append("Usage: python musicViz.py [--update] [--np1|--np1s|--np2|--np2a|--np3a]\n")
     lines.append(f"Available configs (from {cfg_path}):")
@@ -265,11 +264,6 @@ def generate_help_from_zones(cfg_path="zones.config"):
         desc = cfg.get("description", "")
         zones = cfg.get("zones", []) or []
         lines.append(f"  --{key}: {pm} - {desc} ({len(zones)} zones)")
-    if global_amp:
-        lines.append("\nGlobal 'amp' settings:")
-        for a in ("min", "max", "initial", "up_speed", "down_speed"):
-            if a in global_amp:
-                lines.append(f"  {a}: {global_amp[a]}")
     lines.append("\nExamples:")
     lines.append("  python musicViz.py --np1        # use np1 config")
     lines.append("  python musicViz.py --np1s --update  # update GlyphModder.py and run")
