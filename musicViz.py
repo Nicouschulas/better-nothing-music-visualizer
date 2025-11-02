@@ -2,7 +2,7 @@
 """
 musicViz.py
 Generates NGlyph + OGG (Opus) for SebiAI GlyphModder.
-Reads zones.json in working directory.
+Reads zones.config in working directory.
 Usage:
     python musicViz.py <audiofile>
 """
@@ -15,22 +15,6 @@ from pydub import AudioSegment
 import urllib.request
 import urllib.error
 import time
-
-# ------------------ defaults ------------------
-DEFAULTS = {
-    "phone_model": "PHONE1",
-    "fps": 60,
-    "decay_alpha": 0.9,     # smoother falloff
-    "title": None,
-    # amplifier defaults (overridden by zones.json 'amp' section)
-    "amp": {
-        "min": 0.5,
-        "max": 2.0,
-        "initial": 1.0,
-        "up_speed": 0.5,    # units per second
-        "down_speed": 0.25  # units per second
-    }
-}
 
 # ------------------ helpers ------------------
 def load_audio_mono(path):
@@ -78,20 +62,30 @@ def compute_raw_matrix(samples, sr, zones, fps):
         if frame.size < win_len:
             frame = np.pad(frame, (0, win_len - frame.size))
         spec = np.abs(rfft(frame * win, n=nfft))
-        for zi, (low, high) in enumerate(zones):
+
+        # accept zone entries like [low, high] or [low, high, "description"]
+        for zi, zone in enumerate(zones):
+            try:
+                low = float(zone[0])
+                high = float(zone[1])
+            except Exception:
+                print("Invalid zone entry detected") # invalid zone entry, set zero so it doesn't crash
+                low = 0.0
+                high = 0.0
             raw[i, zi] = compute_zone_peak(spec, freqs, low, high)
+
         if (i + 1) % tick == 0 or i == n_frames - 1:
             pct = int((i + 1) / n_frames * 100)
             print(f"\r[FFT] {pct}% ({i+1}/{n_frames})", end='', flush=True)
     print()  # newline after progress
     return raw, n_frames
 
-# normalize raw (0..1) to quadratic brightness (0..5000) — kept simple
+# normalize raw (0..1) to quadratic brightness (0..5000)
 def normalize_to_linear(raw):
     zone_max = np.max(raw, axis=0)
     zone_max[zone_max == 0] = 1e-12
     scaled = raw / zone_max
-    # quadratic mapping for emphasis on peaks (kept as requested)
+    # quadratic mapping for emphasis on peaks
     return (np.clip(scaled, 0, 1) ** 2 * 5000.0).astype(float)
 
 # simple stable multiplier: use median of frame maxima
@@ -106,8 +100,8 @@ def compute_stable_multiplier(linear, amp_conf):
         mult = 1.0
     else:
         mult = target / ref
-    amp_min = float(amp_conf.get("min", DEFAULTS["amp"]["min"]))
-    amp_max = float(amp_conf.get("max", DEFAULTS["amp"]["max"]))
+    amp_min = float(amp_conf.get("min"))
+    amp_max = float(amp_conf.get("max"))
     return float(max(amp_min, min(amp_max, mult)))
 
 # Apply one stable multiplier and perform simple instant-rise / smoothed-fall
@@ -142,11 +136,11 @@ def apply_stable_and_smooth(linear, fps, decay_alpha, amp_conf):
 # ------------------ main processing ------------------
 def process(audio_path, conf, out_nglyph_path):
     # --- config
-    fps = conf.get("fps", DEFAULTS["fps"])
-    phone_model = conf.get("phone_model", DEFAULTS["phone_model"])
-    decay_alpha = conf.get("decay_alpha", DEFAULTS["decay_alpha"])
+    fps = 60  # FPS is fixed to 60 
+    phone_model = conf.get("phone_model")
+    decay_alpha = conf.get("decay_alpha")
     zones = conf["zones"]
-    amp_conf = conf.get("amp", DEFAULTS["amp"])
+    amp_conf = conf.get("amp")
 
     # --- audio analysis
     samples, sr = load_audio_mono(audio_path)
@@ -225,7 +219,7 @@ def download_glyphmodder_to_cwd(overwrite=False, attempts=2, backoff=1.0):
     last_err = None
     for attempt in range(1, attempts + 1):
         try:
-            print(f"[+] Downloading GlyphModder from SebiAi's repo (attempt {attempt}) ...")
+            print(f"[+] Downloading GlyphModder from SebiAI's repo (attempt {attempt}) ...")
             with urllib.request.urlopen(url, timeout=10) as resp:
                 if resp.status != 200:
                     raise urllib.error.HTTPError(url, resp.status, "Non-200 response", resp.headers, None)
@@ -245,31 +239,105 @@ def download_glyphmodder_to_cwd(overwrite=False, attempts=2, backoff=1.0):
     print("[!] Could not obtain GlyphModder.py from SebiAI's GitHub.")
     return False
 
+# new helper: generate a short help message from zones.config
+def generate_help_from_zones(cfg_path="zones.config"):
+    if not os.path.isfile(cfg_path):
+        return (f"{cfg_path} not found in working directory.\n"
+                "Create a zones file or download it from the repository.")
+    try:
+        raw = json.load(open(cfg_path, "r", encoding="utf-8"))
+    except Exception as e:
+        return f"Failed to read {cfg_path}: {e}"
+
+    # only support multi-config format: top-level "amp" and per-phone keys
+    if "zones" in raw:
+        return (f"Legacy single-config format detected in {cfg_path}.\n"
+                "This tool now requires a multi-config file with a top-level 'amp' and per-phone entries.\n"
+                "Example structure is in the repository. Aborting.")
+    global_amp = raw.get("amp", {})
+    conf_map = {k: v for k, v in raw.items() if k != "amp"}
+
+    lines = []
+    lines.append("Usage: python musicViz.py [--update] [--np1|--np1s|--np2|--np2a|--np3a]\n")
+    lines.append(f"Available configs (from {cfg_path}):")
+    for key, cfg in conf_map.items():
+        pm = cfg.get("phone_model", "<unknown>")
+        desc = cfg.get("description", "")
+        zones = cfg.get("zones", []) or []
+        lines.append(f"  --{key}: {pm} - {desc} ({len(zones)} zones)")
+    if global_amp:
+        lines.append("\nGlobal 'amp' settings:")
+        for a in ("min", "max", "initial", "up_speed", "down_speed"):
+            if a in global_amp:
+                lines.append(f"  {a}: {global_amp[a]}")
+    lines.append("\nExamples:")
+    lines.append("  python musicViz.py --np1        # use np1 config")
+    lines.append("  python musicViz.py --np1s --update  # update GlyphModder.py and run")
+    return "\n".join(lines)
+
+# new helper: validate amp configuration (do not invent defaults)
+def validate_amp_conf(amp_conf):
+    if not isinstance(amp_conf, dict):
+        raise ValueError("The 'amp' entry must be an object in zones.config (global) or inside a phone config.")
+    # require at least min and max to be present
+    for key in ("min", "max"):
+        if key not in amp_conf:
+            raise ValueError(f"amp missing required field '{key}' — please add it to zones.config")
+    # Only coerce known numeric keys. Ignore other keys (e.g. description).
+    numeric_keys = ("min", "max", "initial", "up_speed", "down_speed", "percentile", "target")
+    coerced = {}
+    for k in numeric_keys:
+        if k in amp_conf:
+            v = amp_conf[k]
+            try:
+                coerced[k] = float(v)
+            except Exception:
+                raise ValueError(f"amp.{k} must be numeric (got {repr(v)})")
+    return coerced
+
 # ------------------ entrypoint ------------------
 if __name__ == "__main__":
+    # if script called with no args, show help generated from zones.config
+    if len(sys.argv) == 1:
+        cfg_path_hint = "zones.config"
+        print(generate_help_from_zones(cfg_path_hint))
+        sys.exit(0)
+
     # accept optional --update flag to force overwriting GlyphModder.py from GitHub
     update_flag = False
     if "--update" in sys.argv:
         update_flag = True
+        # remove flag so it doesn't interfere with other argument handling
+        sys.argv = [a for a in sys.argv if a != "--update"]
 
-    # Attempt to pull GlyphModder.py if --update
+    # determine selected phone config
+    selected_phone_key = "np1" # default to "np1" when no --np flag provided
+    # look for any CLI args beginning with "--np" (last one wins)
+    # ignore the script name at sys.argv[0]
+    cli_args = sys.argv[1:]
+    if cli_args:
+        np_flags = [a for a in cli_args if isinstance(a, str) and a.startswith("--np")]
+        if np_flags:
+            # map "--np1s" -> "np1s"
+            selected_phone_key = np_flags[-1].lstrip("-")
+
+    # Attempt to pull GlyphModder.py into cwd if --update was requested
     if update_flag:
-         try:
-            download_glyphmodder_to_cwd(overwrite=update_flag)
-         except Exception as e_download:
+        try:
+            download_glyphmodder_to_cwd(overwrite=True)
+        except Exception as e_download:
             print(f"[!] Warning: automatic GlyphModder fetch failed: {e_download}")
         # continue — run_glyphmodder_write will still search parent dir / cwd as before
-
-    # Instead of a single input file, process all files in ./input and write to ./output
+    # prepare directories
     input_dir = "Input"
     output_dir = "Output"
     nglyph_dir = "Nglyph"
-    cfg_path = "zones.json"
+    cfg_path = "zones.config"
 
     if not os.path.isdir(input_dir):
         print(f"[+] Creating input directory: {input_dir}")
         os.makedirs(input_dir, exist_ok=True)
-        print(f"[!] Please place audio files into the '{input_dir}' folder and re-run.")
+        print(f"[!] Please place audio files into the '{input_dir}' folder and re-run. Supported types include mp3, ogg, and m4a.")
         sys.exit(0)
 
     if not os.path.isdir(output_dir):
@@ -279,16 +347,83 @@ if __name__ == "__main__":
         os.makedirs(nglyph_dir, exist_ok=True)
 
     if not os.path.isfile(cfg_path):
-        print("[!] zones.json not found in working directory.")
+        print("[!] zones.config not found in working directory.")
         sys.exit(1)
 
-    conf = json.load(open(cfg_path, "r", encoding="utf-8"))
-    for k,v in DEFAULTS.items():
-        conf.setdefault(k, v)
+    raw_cfg = json.load(open(cfg_path, "r", encoding="utf-8"))
+
+    # require multi-config format (no legacy single-config)
+    if "zones" in raw_cfg:
+        print("[!] Legacy single-config format is no longer supported. Please convert zones.config to the multi-config format (top-level 'amp' and per-phone entries).")
+        sys.exit(1)
+    # top-level amp must exist
+    global_amp = raw_cfg.get("amp")
+    if global_amp is None:
+        print("[!] zones.config must include a top-level 'amp' object. Please add it.")
+        sys.exit(1)
+
+    # read optional global decay value (accept both 'decay-alpha' and 'decay_alpha')
+    raw_global_decay = None
+    if "decay-alpha" in raw_cfg:
+        raw_global_decay = raw_cfg.get("decay-alpha")
+    elif "decay_alpha" in raw_cfg:
+        raw_global_decay = raw_cfg.get("decay_alpha")
+    global_decay = None
+    if raw_global_decay is not None:
+        try:
+            global_decay = float(raw_global_decay)
+        except Exception:
+            print("[!] Invalid top-level decay value in zones.config; 'decay-alpha' must be numeric.")
+            sys.exit(1)
+    
+    conf_map = {k: v for k, v in raw_cfg.items() if k != "amp"}
+
+    # choose selected config (default to np1 if present, else first key)
+    if selected_phone_key is None:
+        selected_phone_key = "np1" if "np1" in conf_map else next(iter(conf_map.keys()))
+
+    conf = conf_map.get(selected_phone_key)
+    if conf is None:
+        print(f"[!] Requested config '{selected_phone_key}' not found in zones.config. Falling back to first available config.")
+        conf = conf_map[next(iter(conf_map.keys()))]
+
+    # use per-phone amp if present, otherwise use global amp (do NOT create defaults)
+    amp_conf = conf.get("amp") if conf.get("amp") is not None else global_amp
+    if amp_conf is None:
+        print("[!] Missing 'amp' configuration. Please add a top-level 'amp' in zones.config or an 'amp' object in the selected phone config.")
+        sys.exit(1)
+
+    try:
+        amp_conf = validate_amp_conf(amp_conf)
+    except ValueError as e:
+        print(f"[!] Invalid 'amp' configuration: {e}")
+        sys.exit(1)
+
+    # inject validated amp back into conf so downstream code reads numeric values
+    conf["amp"] = amp_conf
+
+    # validate selected phone config: require 'zones' list and numeric 'decay_alpha'
+    if "zones" not in conf or not isinstance(conf["zones"], list):
+        print("[!] Selected config missing 'zones' array. Please add a 'zones' list to the phone config in zones.config.")
+        sys.exit(1)
+    
+    # decay-alpha may be present per-phone or provided globally
+    if "decay-alpha" not in conf:
+        if global_decay is not None:
+            conf["decay_alpha"] = global_decay
+        else:
+            print("[!] Selected config missing 'decay-alpha' and no global 'decay-alpha' provided. Please add one to zones.config.")
+            sys.exit(1)
+    else:
+        try:
+            conf["decay_alpha"] = float(conf["decay_alpha"])
+        except Exception:
+            print("[!] Invalid 'decay_alpha' value in phone config; it must be numeric.")
+            sys.exit(1)
 
     files = sorted(os.listdir(input_dir))
     if not files:
-        print(f"No files found in '{input_dir}'. Drop audio files there and run again.")
+        print(f"No files found in '{input_dir}'. Drop audio files there and run again. Supported types include mp3, ogg, m4a.")
         sys.exit(0)
 
     processed = []
@@ -319,7 +454,7 @@ if __name__ == "__main__":
                     except Exception:
                         # fallback to copy+remove
                         import shutil
-                        shutil.copy2(final_ogg, desired_final_gg)
+                        shutil.copy2(final_ogg, desired_final_ogg)
                         os.remove(final_ogg)
             except Exception as e_move:
                 print(f"[!] Warning: couldn't rename GlyphModder output: {e_move}")
@@ -342,4 +477,4 @@ if __name__ == "__main__":
             except Exception:
                 pass
 
-    print(f"[+] Done. Processed {len(processed)} file(s): {processed}. Find them in the output folder!")
+    print(f"[+] Done. Processed {len(processed)} file(s) in total. Find them in the output folder!")
