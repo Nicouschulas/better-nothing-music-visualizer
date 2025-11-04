@@ -65,13 +65,25 @@ def compute_raw_matrix(samples, sr, zones, fps):
 
         # accept zone entries like [low, high] or [low, high, "description"]
         for zi, zone in enumerate(zones):
-            try:
-                low = float(zone[0])
-                high = float(zone[1])
-            except Exception:
-                print("Invalid zone entry detected") # invalid zone entry, set zero so it doesn't crash
+            # robust handling: ensure we have at least two numeric bounds
+            if not (isinstance(zone, (list, tuple)) and len(zone) >= 2):
+                print(f"[!] Invalid zone entry at index {zi}: {zone!r} -- using 0..0")
                 low = 0.0
                 high = 0.0
+            else:
+                try:
+                    low = float(zone[0])
+                    high = float(zone[1])
+                except Exception:
+                    print(f"[!] Invalid numeric bounds for zone {zi}: {zone!r} -- using 0..0")
+                    low = 0.0
+                    high = 0.0
+
+            # swap if bounds reversed (user-supplied reversed ranges were producing empty values)
+            if low > high:
+                low, high = high, low
+                print(f"[!] Warning: swapped zone bounds for zone {zi} -> low={low}, high={high}")
+
             raw[i, zi] = compute_zone_peak(spec, freqs, low, high)
 
         if (i + 1) % tick == 0 or i == n_frames - 1:
@@ -304,6 +316,13 @@ if __name__ == "__main__":
         # remove flag so it doesn't interfere with other argument handling
         sys.argv = [a for a in sys.argv if a != "--update"]
 
+    # accept --nglyph flag: only produce .nglyph files, skip conversion and GlyphModder
+    nglyph_only = False
+    if "--nglyph" in sys.argv:
+        nglyph_only = True
+        sys.argv = [a for a in sys.argv if a != "--nglyph"]
+        print("[+] Running in --nglyph mode: will only generate .nglyph files (no audio conversion, no GlyphModder).")
+
     # determine selected phone config
     selected_phone_key = "np1" # default to "np1" when no --np flag provided
     # look for any CLI args beginning with "--np" (last one wins)
@@ -433,41 +452,47 @@ if __name__ == "__main__":
         print(f"[+] Processing '{fname}' -> nglyph:'{out_nglyph}' (temp ogg:'{temp_unmod_ogg}') -> final:'{desired_final_ogg}'")
         final_ogg = None
         try:
-            # convert/ensure ogg in output folder (writes absolute path)
-            ensure_ogg_opus(in_path, temp_unmod_ogg)
-            # produce nglyph (writes to Nglyph folder)
-            nglyph_path = process(in_path, conf, out_nglyph)
-            # attach ogg via GlyphModder; run with cwd=output_dir so final ogg lands in Output
-            final_ogg = run_glyphmodder_write(nglyph_path, temp_unmod_ogg, conf.get("title"), cwd=os.path.abspath(output_dir))
-            # if GlyphModder produced a differently named file, move it to desired_final_ogg
+            if nglyph_only:
+                # only produce the nglyph file, skip conversion and GlyphModder
+                nglyph_path = process(in_path, conf, out_nglyph)
+            else:
+                # convert/ensure ogg in output folder (writes absolute path)
+                ensure_ogg_opus(in_path, temp_unmod_ogg)
+                # produce nglyph (writes to Nglyph folder)
+                nglyph_path = process(in_path, conf, out_nglyph)
+                # attach ogg via GlyphModder; run with cwd=output_dir so final ogg lands in Output
+                final_ogg = run_glyphmodder_write(nglyph_path, temp_unmod_ogg, conf.get("title"), cwd=os.path.abspath(output_dir))
+
+             # if GlyphModder produced a differently named file, move it to desired_final_ogg
             try:
-                if os.path.abspath(final_ogg) != desired_final_ogg and os.path.isfile(final_ogg):
-                    # overwrite if needed
-                    try:
-                        os.replace(final_ogg, desired_final_ogg)
-                    except Exception:
-                        # fallback to copy+remove
-                        import shutil
-                        shutil.copy2(final_ogg, desired_final_ogg)
-                        os.remove(final_ogg)
+                if not nglyph_only and os.path.abspath(final_ogg) != desired_final_ogg and os.path.isfile(final_ogg):
+                     # overwrite if needed
+                     try:
+                         os.replace(final_ogg, desired_final_ogg)
+                     except Exception:
+                         # fallback to copy+remove
+                         import shutil
+                         shutil.copy2(final_ogg, desired_final_ogg)
+                         os.remove(final_ogg)
             except Exception as e_move:
-                print(f"[!] Warning: couldn't rename GlyphModder output: {e_move}")
+                 print(f"[!] Warning: couldn't rename GlyphModder output: {e_move}")
             processed.append(fname)
         except Exception as e:
             print(f"[!] Failed processing '{fname}': {e}")
         finally:
             # Always attempt to remove the intermediate unmod file(s).
             try:
-                if os.path.isfile(temp_unmod_ogg):
+                if not nglyph_only and os.path.isfile(temp_unmod_ogg):
                     os.remove(temp_unmod_ogg)
                     print(f"[cleanup] removed intermediate: {temp_unmod_ogg}")
             except Exception:
                 pass
             # Also attempt to remove the basename representation inside output_dir (defensive)
             try:
-                alt = os.path.join(os.path.abspath(output_dir), os.path.basename(temp_unmod_ogg))
-                if os.path.isfile(alt):
-                    os.remove(alt)
+                if not nglyph_only:
+                    alt = os.path.join(os.path.abspath(output_dir), os.path.basename(temp_unmod_ogg))
+                    if os.path.isfile(alt):
+                        os.remove(alt)
             except Exception:
                 pass
 
