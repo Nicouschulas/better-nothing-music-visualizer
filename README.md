@@ -1,7 +1,21 @@
 # Better-nothing-music-visualizer
 This script generates **NGlyph** light animations from any audio file, then runs the generated file through *SebiAi's GlyphModder* to have **better music visualization on nothing phones**. Because the one that Nothing made is *not that good* after all.
 
-# This repo is still under construction! Feel free to contribute!
+## This repo is still under construction! Feel free to contribute!
+
+# Why does this exist?
+For a lot of people (including me), the *Stock Glyph Music Visualization provided by Nothing* feature feels random, even if it actually isn't, it's just not obvious.
+
+### On top of that, that feature isn't really using the whole potential of the Glyph Interface:
+- Only 3 light intensities are used, like a 2 bit depth pwm,
+- Looks like 25fps,
+- And as I mentioned earlier, feels random most of the time.
+
+### So, that's why I made my own music visualizer:
+- It uses the full 12 bit depth pwm of the glyph interface (4096 light levels),
+- It has a consistent 60 fps frame rate,
+- It uses the fragmented glyphs, and the 15-zone mode of the Nothing Phone (1).
+- It really syncs with the music and it's obvious, unlike Nothing's where you really need to focus to notice.
 
 ## Overview
 
