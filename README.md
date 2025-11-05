@@ -19,7 +19,7 @@ For a lot of people (including me), the *Stock Glyph Music Visualization provide
 
 ## Overview
 
-`musicViz.py` takes an audio file (like `.mp3`, `.m4a`, `.ogg`) and creates a **NGlyph** file containing the Glyph animations, and makes and an  glyphed **OGG** file for playback in *Glyph composer* or in *Glyphify*.
+`musicViz.py` takes an audio file (like `.mp3`, `.m4a`, `.ogg`), creates a `.nglyph` file containing the Glyph animations, and outputs a glyphed **OGG** file for playback in *Glyph composer* or in *Glyphify*.
 
 
 ## How it works:
@@ -60,7 +60,7 @@ zones.config → Required configuration file.
 
 ---
 
-## ⚙️ zones.config
+## ⚙️ zones.config (not accurate pls remind me)
 
 `zones.config` defines how frequencies map to phone LED zones and amplitude settings.
 
