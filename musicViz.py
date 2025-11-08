@@ -1,10 +1,23 @@
 #!/usr/bin/env python3
 """
-musicViz.py
-Generates NGlyph + OGG (Opus) for SebiAI GlyphModder.
-Reads zones.config in working directory.
-Usage:
-    python musicViz.py <audiofile>
+musicViz.py - a tool that brings better music visualization to Nothing Phones!
+https://github.com/Aleks-Levet/better-nothing-music-visualizer
+
+Copyright (C) 2024  Aleks Levet (aka. SebiAi)
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 """
 
 import os, sys, json, subprocess
@@ -93,7 +106,7 @@ def compute_raw_matrix(samples, sr, zones, fps):
     return raw, n_frames
 
 # normalize raw (0..1) to quadratic brightness (0..5000)
-def normalize_to_linear(raw):
+def normalize_to_quadratic(raw):
     zone_max = np.max(raw, axis=0)
     zone_max[zone_max == 0] = 1e-12
     scaled = raw / zone_max
@@ -117,7 +130,7 @@ def compute_stable_multiplier(linear, amp_conf):
     return float(max(amp_min, min(amp_max, mult)))
 
 # Apply one stable multiplier and perform simple instant-rise / smoothed-fall
-def apply_stable_and_smooth(linear, fps, decay_alpha, amp_conf):
+def apply_stable_and_smooth(linear, decay_alpha, amp_conf):
     n_frames, n_zones = linear.shape
     mult = compute_stable_multiplier(linear, amp_conf)
     print(f"[+] stable multiplier: {mult:.3f}")
@@ -162,7 +175,7 @@ def process(audio_path, conf, out_nglyph_path):
     print(f"[+] sr={sr}, frames={n_frames}")
 
     # normalize to quadratic linear 0..5000
-    linear = normalize_to_linear(raw)
+    linear = normalize_to_quadratic(raw)
 
     # apply single-file stable multiplier + smoothing per-frame (realtime-capable)
     final = apply_stable_and_smooth(linear, fps, decay_alpha, amp_conf)
@@ -196,7 +209,6 @@ def run_glyphmodder_write(nglyph_path, ogg_path, title=None, cwd=None):
         download_glyphmodder_to_cwd(overwrite=1) 
         print(f"[+] Proceeding with the downloaded GlyphModder.py from cwd.")
         
-
     # ensure NGlyph is an absolute path (so GlyphModder can find it from any cwd)
     arg_nglyph = os.path.abspath(nglyph_path)
 
@@ -255,21 +267,16 @@ def download_glyphmodder_to_cwd(overwrite=False, attempts=2, backoff=1.0):
 def generate_help_from_zones(cfg_path="zones.config"):
     if not os.path.isfile(cfg_path):
         return (f"{cfg_path} not found in working directory.\n"
-                "Create a zones file or download it from the repository.")
+                "Download it from the repository.")
     try:
         raw = json.load(open(cfg_path, "r", encoding="utf-8"))
     except Exception as e:
         return f"Failed to read {cfg_path}: {e}"
-
-    # only support multi-config format: top-level "amp" and per-phone keys
-    if "zones" in raw:
-        return (f"Legacy single-config format detected in {cfg_path}.\n"
-                "This tool now requires a multi-config file with per-phone entries.\n"
-                "Aborting.")
+    
     # only include entries that look like phone configs (dicts).  This filters out metadata like decay-alpha.
     conf_map = {k: v for k, v in raw.items() if k != "amp" and isinstance(v, dict)}
     lines = []
-    lines.append("Usage: python musicViz.py [--update] [--np1|--np1s|--np2|--np2a|--np3a]\n")
+    lines.append("Usage: python musicViz.py [--update] [--nglyph] [--np1|--np1s|--np2|--np2a|--np3a]\n")
     lines.append(f"Available configs (from {cfg_path}):")
     for key, cfg in conf_map.items():
         pm = cfg.get("phone_model", "<unknown>")
@@ -277,7 +284,8 @@ def generate_help_from_zones(cfg_path="zones.config"):
         zones = cfg.get("zones", []) or []
         lines.append(f"  --{key}: {pm} - {desc} ({len(zones)} zones)")
     lines.append("\nExamples:")
-    lines.append("  python musicViz.py --np1        # use np1 config")
+    lines.append("  python musicViz.py --np1          # use np1 config")
+    lines.append("  python musicViz.py --np1 --nglyph  # only generate an nglyph file using np1 config")
     lines.append("  python musicViz.py --np1s --update  # update GlyphModder.py and run")
     return "\n".join(lines)
 
