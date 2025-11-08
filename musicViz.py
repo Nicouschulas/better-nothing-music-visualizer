@@ -39,12 +39,6 @@ def load_audio_mono(path):
     samples /= float(2 ** (seg.sample_width * 8 - 1))
     return samples, sr
 
-def ensure_ogg_opus(input_path, out_ogg_path):
-    """Export to Ogg Opus using ffmpeg via pydub."""
-    a = AudioSegment.from_file(input_path)
-    a.export(out_ogg_path, format="ogg", codec="libopus", parameters=["-b:a", "192k"])
-    return out_ogg_path
-
 def next_pow2(n):
     p = 1
     while p < n:
@@ -178,7 +172,7 @@ def process(audio_path, conf, out_nglyph_path):
     linear = normalize_to_quadratic(raw)
 
     # apply single-file stable multiplier + smoothing per-frame (realtime-capable)
-    final = apply_stable_and_smooth(linear, fps, decay_alpha, amp_conf)
+    final = apply_stable_and_smooth(linear, decay_alpha, amp_conf)
 
     # --- write NGlyph
     author_rows = [",".join(map(str, row)) + "," for row in final]
@@ -289,7 +283,7 @@ def generate_help_from_zones(cfg_path="zones.config"):
     lines.append("  python musicViz.py --np1s --update  # update GlyphModder.py and run")
     return "\n".join(lines)
 
-# new helper: validate amp configuration (do not invent defaults)
+# new helper: validate amp configuration 
 def validate_amp_conf(amp_conf):
     if not isinstance(amp_conf, dict):
         raise ValueError("The 'amp' entry must be an object in zones.config (global) or inside a phone config.")
@@ -394,7 +388,7 @@ if __name__ == "__main__":
         try:
             global_decay = float(raw_global_decay)
         except Exception:
-            print("[!] Invalid top-level decay value in zones.config; 'decay-alpha' must be numeric.")
+            print("[!] Invalid decay value in zones.config; 'decay-alpha' must be numeric.")
             sys.exit(1)
     
     conf_map = {k: v for k, v in raw_cfg.items() if k != "amp"}
@@ -447,61 +441,25 @@ if __name__ == "__main__":
         print(f"No files found in '{input_dir}'. Drop audio files there and run again. Supported types include mp3, ogg, m4a.")
         sys.exit(0)
 
-    processed = []
+    processed = 0
     for fname in files:
         in_path = os.path.join(input_dir, fname)
         if not os.path.isfile(in_path):
             continue
         base = os.path.splitext(os.path.basename(fname))[0]
-        out_nglyph = os.path.join(nglyph_dir, base + ".nglyph")   # save nglyphs under Nglyph/
-        # intermediate unmodded ogg (absolute path) and desired final name
-        temp_unmod_ogg = os.path.abspath(os.path.join(output_dir, base + ".unmod.ogg"))
+        out_nglyph = os.path.join(nglyph_dir, base + ".nglyph")   # save nglyph file under Nglyph/
         desired_final_ogg = os.path.abspath(os.path.join(output_dir, base + ".ogg"))
-        print(f"[+] Processing '{fname}' -> nglyph:'{out_nglyph}' (temp ogg:'{temp_unmod_ogg}') -> final:'{desired_final_ogg}'")
+        print(f"[+] Processing '{fname}' -> nglyph:'{out_nglyph}' -> final:'{desired_final_ogg}'")
         final_ogg = None
-        try:
-            if nglyph_only:
-                # only produce the nglyph file, skip conversion and GlyphModder
-                nglyph_path = process(in_path, conf, out_nglyph)
-            else:
-                # convert/ensure ogg in output folder (writes absolute path)
-                ensure_ogg_opus(in_path, temp_unmod_ogg)
-                # produce nglyph (writes to Nglyph folder)
-                nglyph_path = process(in_path, conf, out_nglyph)
-                # attach ogg via GlyphModder; run with cwd=output_dir so final ogg lands in Output
-                final_ogg = run_glyphmodder_write(nglyph_path, temp_unmod_ogg, conf.get("title"), cwd=os.path.abspath(output_dir))
-
-             # if GlyphModder produced a differently named file, move it to desired_final_ogg
-            try:
-                if not nglyph_only and os.path.abspath(final_ogg) != desired_final_ogg and os.path.isfile(final_ogg):
-                     # overwrite if needed
-                     try:
-                         os.replace(final_ogg, desired_final_ogg)
-                     except Exception:
-                         # fallback to copy+remove
-                         import shutil
-                         shutil.copy2(final_ogg, desired_final_ogg)
-                         os.remove(final_ogg)
-            except Exception as e_move:
-                 print(f"[!] Warning: couldn't rename GlyphModder output: {e_move}")
-            processed.append(fname)
-        except Exception as e:
-            print(f"[!] Failed processing '{fname}': {e}")
-        finally:
-            # Always attempt to remove the intermediate unmod file(s).
-            try:
-                if not nglyph_only and os.path.isfile(temp_unmod_ogg):
-                    os.remove(temp_unmod_ogg)
-                    print(f"[cleanup] removed intermediate: {temp_unmod_ogg}")
-            except Exception:
-                pass
-            # Also attempt to remove the basename representation inside output_dir (defensive)
-            try:
-                if not nglyph_only:
-                    alt = os.path.join(os.path.abspath(output_dir), os.path.basename(temp_unmod_ogg))
-                    if os.path.isfile(alt):
-                        os.remove(alt)
-            except Exception:
-                pass
-
-    print(f"[+] Done. Processed {len(processed)} file(s) in total. Find them in the output folder!")
+        # produce the nglyph file
+        nglyph_path = process(in_path, conf, out_nglyph)
+        if not nglyph_only:
+            final_ogg = run_glyphmodder_write(nglyph_path, desired_final_ogg, conf.get("title"), cwd=os.path.abspath(output_dir))
+            if final_ogg and final_ogg.endswith("_composed.ogg"): # rename to standard .ogg
+                new_ogg = final_ogg.replace("_composed.ogg", ".ogg")
+                os.rename(final_ogg, new_ogg) 
+                final_ogg = new_ogg
+                print(f"[+] Produced {final_ogg}")
+        processed += 1
+    print("-/-/-/-/-/-/-/-/-/-/-/-/-/-/-")
+    print(f"Done! Processed {processed} file(s) in total. Find them in the output folder!")
