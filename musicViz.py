@@ -180,7 +180,7 @@ def process(audio_path, conf, out_nglyph_path):
         "VERSION": 1,
         "PHONE_MODEL": phone_model,
         "AUTHOR": author_rows,
-        "CUSTOM1": ["1-0", "150-1"]
+        "CUSTOM1": ["1-0", "1050-1"]
     }
 
     with open(out_nglyph_path, "w", encoding="utf-8") as f:
