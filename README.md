@@ -4,6 +4,7 @@ This script generates **NGlyph** light animations from any audio file, then runs
 ## This repo is still under construction! Feel free to contribute!
 
 # Video demo (early version of the script)
+Here's a comparison between an early verizon of the script and Nothing's music visualizer. Click on the image below to open the YouTube video:
 [![Watch the video](https://img.youtube.com/vi/pQZAkEl7OqQ/0.jpg)](https://www.youtube.com/watch?v=pQZAkEl7OqQ)
 
 # Why does this exist?
@@ -185,8 +186,9 @@ For full format details, see [`10_The NGlyph File Format.md`](./10_The%20NGlyph%
 * **No Input files** → Add your songs in `/Input` first.
 
 
-
 ---
+### [VirusTotal scan here](https://www.virustotal.com/gui/url/c92c1ff82b56eb60bfd1e159592d09f949f0ea2d195e01f7f5adbef0e0b0385b?nocache=1)
+
 ---
 ---
 ---
