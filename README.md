@@ -3,6 +3,9 @@ This script generates **NGlyph** light animations from any audio file, then runs
 
 ## This repo is still under construction! Feel free to contribute!
 
+# Video demo (early version of the script)
+[![Watch the video](https://img.youtube.com/vi/pQZAkEl7OqQ/0.jpg)](https://www.youtube.com/watch?v=pQZAkEl7OqQ)
+
 # Why does this exist?
 For a lot of people (including me), the *Stock Glyph Music Visualization provided by Nothing* feature feels random, even if it actually isn't, it's just not obvious.
 
