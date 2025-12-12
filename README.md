@@ -2,6 +2,7 @@
 This script generates **NGlyph** light animations from any audio file, then runs the generated file through *SebiAi's GlyphModder* to have **better music visualization on nothing phones**. Because the one that Nothing made is *not that good* after all.
 
 ## This repo is still under construction! Feel free to contribute!
+ [This is the discord thread of the project in the Nothing server.](https://discord.com/channels/930878214237200394/1434923843239280743) Feel free to jump in and join us!
 
 # Video demo (early version of the script)
 Here's a comparison between an early verizon of the script and Nothing's music visualizer. Click on the image below to open the YouTube video:
