@@ -6,6 +6,7 @@ This script generates **NGlyph** light animations from any audio file, then runs
 
 # Video demo (early version of the script)
 Here's a comparison between an early verizon of the script and Nothing's music visualizer. Click on the image below to open the YouTube video:
+
 [![Watch the video](https://img.youtube.com/vi/pQZAkEl7OqQ/0.jpg)](https://www.youtube.com/watch?v=pQZAkEl7OqQ)
 
 # Why does this exist?
