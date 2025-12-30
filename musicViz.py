@@ -30,6 +30,14 @@ import urllib.error
 import time
 
 # ------------------ helpers ------------------
+def convert_to_ogg(input_path, output_path):
+    """Convert any audio file to OGG format using pydub."""
+    print(f"[+] Converting '{input_path}' to OGG -> '{output_path}'")
+    audio = AudioSegment.from_file(input_path)
+    audio.export(output_path, format="ogg")
+    print(f"[+] Conversion complete: {output_path}")
+    return output_path
+
 def load_audio_mono(path):
     seg = AudioSegment.from_file(path)
     sr = seg.frame_rate
@@ -209,7 +217,7 @@ def run_glyphmodder_write(nglyph_path, ogg_path, title=None, cwd=None):
     # if we run with cwd set to the output dir, pass only the basename for the ogg
     arg_ogg = os.path.basename(ogg_path) if cwd else ogg_path
 
-    cmd = [sys.executable, glyphmodder_path, "write", "-t", title, arg_nglyph, arg_ogg]
+    cmd = [sys.executable, glyphmodder_path, "write", "--auto-fix-audio", "-t", title, arg_nglyph, arg_ogg]
     print("[+] Running GlyphModder:", " ".join(cmd), f"(cwd={cwd or os.getcwd()})")
     res = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd)
     if res.returncode != 0:
@@ -454,12 +462,37 @@ if __name__ == "__main__":
         # produce the nglyph file
         nglyph_path = process(in_path, conf, out_nglyph)
         if not nglyph_only:
-            final_ogg = run_glyphmodder_write(nglyph_path, desired_final_ogg, conf.get("title"), cwd=os.path.abspath(output_dir))
-            if final_ogg and final_ogg.endswith("_composed.ogg"): # rename to standard .ogg
-                new_ogg = final_ogg.replace("_composed.ogg", ".ogg")
-                os.rename(final_ogg, new_ogg) 
-                final_ogg = new_ogg
+            # Convert input audio to OGG in output directory first
+            source_ogg = convert_to_ogg(in_path, desired_final_ogg)
+            final_ogg = run_glyphmodder_write(nglyph_path, source_ogg, conf.get("title"), cwd=os.path.abspath(output_dir))
+            
+            # GlyphModder may create _fixed_composed.ogg or _composed.ogg depending on whether audio fix was needed
+            # Find the actual composed file and rename it to the clean final name
+            output_dir_abs = os.path.abspath(output_dir)
+            composed_patterns = [
+                os.path.join(output_dir_abs, base + "_fixed_composed.ogg"),
+                os.path.join(output_dir_abs, base + "_composed.ogg"),
+            ]
+            composed_file = None
+            for pattern in composed_patterns:
+                if os.path.isfile(pattern):
+                    composed_file = pattern
+                    break
+            
+            if composed_file:
+                # Rename to clean final name
+                os.rename(composed_file, desired_final_ogg)
+                final_ogg = desired_final_ogg
                 print(f"[+] Produced {final_ogg}")
+                
+                # Clean up intermediate files (_fixed.ogg, original converted ogg if different)
+                for suffix in ["_fixed.ogg"]:
+                    intermediate = os.path.join(output_dir_abs, base + suffix)
+                    if os.path.isfile(intermediate) and intermediate != desired_final_ogg:
+                        os.remove(intermediate)
+                        print(f"[+] Cleaned up {intermediate}")
+            else:
+                print(f"[!] Warning: Could not find composed output file for {base}")
         processed += 1
     print("-/-/-/-/-/-/-/-/-/-/-/-/-/-/-")
     print(f"Done! Processed {processed} file(s) in total. Find them in the output folder!")
