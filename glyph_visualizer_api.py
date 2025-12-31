@@ -29,6 +29,220 @@ from musicViz import (
     download_glyphmodder_to_cwd
 )
 
+import numpy as np
+from scipy.fft import rfft, rfftfreq
+from scipy.signal import get_window
+
+
+# ================== ADAPTIVE ZOOM HELPERS ==================
+
+def compute_band_energy(samples, sr, fps, buffer_seconds=2.0):
+    """
+    Compute energy in 3 frequency bands over time with rolling buffer.
+    
+    Bands:
+        - Low: 20-200Hz (bass/sub)
+        - Mid: 200-2000Hz (vocals/instruments)
+        - High: 2000-16000Hz (treble/air)
+    
+    Returns:
+        band_energy: (n_frames, 3) array with [low, mid, high] energy per frame
+        dominant_band: (n_frames,) array with dominant band index per frame (-1 if none >70%)
+        dominance_ratio: (n_frames,) ratio of dominant band energy
+    """
+    hop = int(round(sr / float(fps)))
+    win_len = int(round(sr * 0.025))
+    win = get_window("hann", win_len, fftbins=True)
+    nfft = 2 ** int(np.ceil(np.log2(win_len)))
+    freqs = rfftfreq(nfft, 1 / sr)
+    
+    n_frames = int(np.ceil(len(samples) / hop))
+    buffer_frames = int(buffer_seconds * fps)
+    
+    # Frequency band masks
+    low_mask = (freqs >= 20) & (freqs < 200)
+    mid_mask = (freqs >= 200) & (freqs < 2000)
+    high_mask = (freqs >= 2000) & (freqs < 16000)
+    
+    band_energy = np.zeros((n_frames, 3))
+    
+    for i in range(n_frames):
+        start = i * hop
+        frame = samples[start:start + win_len]
+        if frame.size < win_len:
+            frame = np.pad(frame, (0, win_len - frame.size))
+        
+        spec = np.abs(rfft(frame * win, n=nfft)) ** 2  # Power spectrum
+        
+        band_energy[i, 0] = np.sum(spec[low_mask])
+        band_energy[i, 1] = np.sum(spec[mid_mask])
+        band_energy[i, 2] = np.sum(spec[high_mask])
+    
+    # Compute rolling average for smoother detection
+    smoothed_energy = np.zeros_like(band_energy)
+    for i in range(n_frames):
+        start_idx = max(0, i - buffer_frames + 1)
+        smoothed_energy[i] = np.mean(band_energy[start_idx:i+1], axis=0)
+    
+    # Determine dominant band
+    total_energy = np.sum(smoothed_energy, axis=1, keepdims=True)
+    total_energy[total_energy == 0] = 1e-12  # Avoid division by zero
+    ratios = smoothed_energy / total_energy
+    
+    dominant_band = np.full(n_frames, -1, dtype=int)
+    dominance_ratio = np.zeros(n_frames)
+    
+    for i in range(n_frames):
+        max_ratio = np.max(ratios[i])
+        if max_ratio >= 0.70:  # 70% threshold
+            dominant_band[i] = np.argmax(ratios[i])
+            dominance_ratio[i] = max_ratio
+    
+    return band_energy, dominant_band, dominance_ratio
+
+
+def generate_zoomed_zones(base_zones, target_range, num_progress_zones=24, progress_zone_start=0):
+    """
+    Generate new frequency zones focused on a target range.
+    
+    Args:
+        base_zones: Original zone list
+        target_range: (low_hz, high_hz) to zoom into
+        num_progress_zones: Number of zones in the progress bar
+        progress_zone_start: Index where progress zones start in base_zones
+    
+    Returns:
+        New zones list with progress zones remapped to target range
+    """
+    zoomed = list(base_zones)  # Copy original
+    low_hz, high_hz = target_range
+    
+    # Logarithmic distribution within the zoomed range
+    log_low = np.log10(max(20, low_hz))
+    log_high = np.log10(min(20000, high_hz))
+    log_freqs = np.logspace(log_low, log_high, num_progress_zones + 1)
+    
+    # Replace only the progress zone portion
+    for i in range(num_progress_zones):
+        zone_idx = progress_zone_start + i
+        if zone_idx >= len(zoomed):
+            break
+        zone_low = log_freqs[i]
+        zone_high = log_freqs[i + 1]
+        # Preserve original description
+        desc = zoomed[zone_idx][2] if len(zoomed[zone_idx]) > 2 else f"Zone {zone_idx+1}"
+        zoomed[zone_idx] = [zone_low, zone_high, desc]
+    
+    return zoomed
+
+
+def interpolate_zones(zones_from, zones_to, alpha, num_progress_zones=24, progress_zone_start=0):
+    """
+    Smoothly interpolate between two zone configurations.
+    
+    Args:
+        zones_from: Starting zones
+        zones_to: Target zones
+        alpha: Interpolation factor (0=from, 1=to)
+        num_progress_zones: Number of progress zones to interpolate
+        progress_zone_start: Index where progress zones start
+    
+    Returns:
+        Interpolated zones list
+    """
+    result = list(zones_from)  # Copy original
+    
+    for i in range(num_progress_zones):
+        zone_idx = progress_zone_start + i
+        if zone_idx >= len(zones_from) or zone_idx >= len(zones_to):
+            break
+        
+        low = zones_from[zone_idx][0] * (1 - alpha) + zones_to[zone_idx][0] * alpha
+        high = zones_from[zone_idx][1] * (1 - alpha) + zones_to[zone_idx][1] * alpha
+        desc = zones_from[zone_idx][2] if len(zones_from[zone_idx]) > 2 else f"Zone {zone_idx+1}"
+        result[zone_idx] = [low, high, desc]
+    
+    return result
+
+
+def apply_adaptive_zoom(samples, sr, base_zones, fps=60, 
+                        transition_time=0.5, num_progress_zones=24, progress_zone_start=0):
+    """
+    Apply adaptive spectrum zoom based on dominant frequency detection.
+    
+    Args:
+        samples: Audio samples
+        sr: Sample rate
+        base_zones: Original zone configuration
+        fps: Frames per second
+        transition_time: Seconds to transition between zoom levels
+        num_progress_zones: Number of zones in progress bar
+        progress_zone_start: Index where progress zones start in base_zones
+    
+    Returns:
+        List of (frame_zones, transition_alpha) for each frame
+    """
+    n_frames = int(np.ceil(len(samples) / int(round(sr / float(fps)))))
+    transition_frames = int(transition_time * fps)
+    
+    # Compute band energy and dominance
+    _, dominant_band, dominance_ratio = compute_band_energy(samples, sr, fps)
+    
+    # Define zoom ranges for each band
+    zoom_ranges = {
+        0: (20, 300),      # Bass zoom: 20-300Hz
+        1: (150, 3000),    # Mid zoom: 150-3000Hz  
+        2: (1500, 16000),  # High zoom: 1500-16000Hz
+        -1: (20, 16000),   # Full range (no zoom)
+    }
+    
+    # Track current zoom state
+    current_zoom = -1
+    zoom_progress = 0.0  # 0 = fully at base, 1 = fully zoomed
+    target_zoom = -1
+    
+    frame_zones = []
+    
+    for i in range(n_frames):
+        new_dominant = dominant_band[i]
+        
+        # Update target if dominance changed
+        if new_dominant != target_zoom:
+            target_zoom = new_dominant
+            
+        # Smoothly transition zoom_progress
+        if target_zoom != -1 and current_zoom == -1:
+            # Zooming in
+            zoom_progress = min(1.0, zoom_progress + 1.0 / transition_frames)
+            current_zoom = target_zoom
+        elif target_zoom == -1 and current_zoom != -1:
+            # Zooming out
+            zoom_progress = max(0.0, zoom_progress - 1.0 / transition_frames)
+            if zoom_progress <= 0:
+                current_zoom = -1
+        elif target_zoom != current_zoom and target_zoom != -1:
+            # Switching between bands
+            zoom_progress = min(1.0, zoom_progress + 1.0 / transition_frames)
+            if zoom_progress >= 1.0:
+                current_zoom = target_zoom
+                zoom_progress = 1.0
+        
+        # Generate zones for this frame
+        if current_zoom == -1 or zoom_progress <= 0:
+            frame_zones.append(base_zones)
+        else:
+            zoomed = generate_zoomed_zones(
+                base_zones, zoom_ranges[current_zoom], 
+                num_progress_zones, progress_zone_start
+            )
+            interpolated = interpolate_zones(
+                base_zones, zoomed, zoom_progress, 
+                num_progress_zones, progress_zone_start
+            )
+            frame_zones.append(interpolated)
+    
+    return frame_zones
+
 
 class GlyphVisualizerAPI:
     """
@@ -201,6 +415,126 @@ class GlyphVisualizerAPI:
         
         return out_nglyph_path
     
+    def _process_audio_adaptive(
+        self, 
+        audio_path: str, 
+        conf: dict, 
+        out_nglyph_path: str,
+        cutoff_threshold: int = 0,
+        cutoff_trigger: int = 100,
+        num_progress_zones: int = 24,
+        progress_zone_start: int = 0,
+        transition_time: float = 0.5
+    ) -> str:
+        """
+        Process audio with adaptive spectrum zoom.
+        
+        When a frequency band is dominant (>70% energy), the progress bar zones
+        smoothly zoom to focus on that frequency range, showing more detail.
+        
+        Args:
+            audio_path: Path to input audio file
+            conf: Prepared configuration dict
+            out_nglyph_path: Path for output .nglyph file
+            cutoff_threshold: Brightness cutoff (0=disabled)
+            cutoff_trigger: Trigger for cutoff
+            num_progress_zones: Number of zones in progress bar
+            progress_zone_start: Index where progress zones start
+            transition_time: Seconds to transition between zoom levels
+            
+        Returns:
+            Path to generated .nglyph file
+        """
+        from musicViz import next_pow2, compute_zone_peak
+        
+        fps = 60
+        phone_model = conf.get("phone_model")
+        decay_alpha = conf.get("decay_alpha")
+        base_zones = conf["zones"]
+        amp_conf = conf.get("amp")
+        
+        # Load audio
+        samples, sr = load_audio_mono(audio_path)
+        
+        print("[+] Computing adaptive spectrum zoom...")
+        
+        # Get per-frame zone configurations with adaptive zoom
+        frame_zones = apply_adaptive_zoom(
+            samples, sr, base_zones, fps, 
+            transition_time, num_progress_zones, progress_zone_start
+        )
+        
+        n_frames = len(frame_zones)
+        n_zones = len(base_zones)
+        
+        # Process each frame with its specific zone configuration
+        hop = int(round(sr / float(fps)))
+        win_len = int(round(sr * 0.025))
+        win = get_window("hann", win_len, fftbins=True)
+        nfft = next_pow2(win_len)
+        freqs = rfftfreq(nfft, 1 / sr)
+        
+        raw = np.zeros((n_frames, n_zones), dtype=float)
+        
+        tick = max(1, n_frames // 10)
+        for i in range(n_frames):
+            start = i * hop
+            frame = samples[start:start + win_len]
+            if frame.size < win_len:
+                frame = np.pad(frame, (0, win_len - frame.size))
+            
+            spec = np.abs(rfft(frame * win, n=nfft))
+            zones_for_frame = frame_zones[i]
+            
+            for zi, zone in enumerate(zones_for_frame):
+                if zi >= n_zones:
+                    break
+                if not (isinstance(zone, (list, tuple)) and len(zone) >= 2):
+                    raw[i, zi] = 0.0
+                    continue
+                    
+                low = float(zone[0])
+                high = float(zone[1])
+                if low > high:
+                    low, high = high, low
+                
+                raw[i, zi] = compute_zone_peak(spec, freqs, low, high)
+            
+            if (i + 1) % tick == 0 or i == n_frames - 1:
+                pct = int((i + 1) / n_frames * 100)
+                print(f"\r[ADAPTIVE] {pct}% ({i+1}/{n_frames})", end='', flush=True)
+        
+        print()
+        
+        # Normalize and smooth using standard pipeline
+        linear = normalize_to_quadratic(raw)
+        final = apply_stable_and_smooth(linear, decay_alpha, amp_conf)
+        
+        # Apply brightness cutoff if enabled
+        if cutoff_threshold > 0:
+            final_array = np.array(final)
+            for i in range(len(final_array)):
+                row = final_array[i]
+                if np.max(row) >= cutoff_trigger:
+                    row[row < cutoff_threshold] = 0
+                    final_array[i] = row
+            final = final_array.tolist()
+        
+        # Write NGlyph file
+        author_rows = [",".join(map(str, row)) + "," for row in final]
+        ng = {
+            "VERSION": 1,
+            "PHONE_MODEL": phone_model,
+            "AUTHOR": author_rows,
+            "CUSTOM1": ["1-0", "1050-1"]
+        }
+        
+        with open(out_nglyph_path, "w", encoding="utf-8") as f:
+            json.dump(ng, f, indent=4)
+        
+        print(f"[+] Saved adaptive NGlyph: {out_nglyph_path}")
+        return out_nglyph_path
+    
     def generate_glyph_ogg(
         self,
         audio_path: str,
@@ -209,7 +543,8 @@ class GlyphVisualizerAPI:
         title: str = None,
         nglyph_only: bool = False,
         cutoff_threshold: int = 0,
-        cutoff_trigger: int = 100
+        cutoff_trigger: int = 100,
+        adaptive_zoom: bool = False
     ) -> str:
         """
         Generate a glyph visualizer OGG file from an audio file.
@@ -225,6 +560,8 @@ class GlyphVisualizerAPI:
             cutoff_threshold: Brightness values below this are cut to 0 when
                              at least one glyph exceeds cutoff_trigger. Default 0 (disabled).
             cutoff_trigger: Minimum brightness required to trigger cutoff. Default 100.
+            adaptive_zoom: If True, dynamically zoom spectrum to focus on dominant
+                          frequency bands. Creates a more dynamic visualization.
             
         Returns:
             Path to the generated OGG file (or .nglyph if nglyph_only=True)
@@ -246,12 +583,42 @@ class GlyphVisualizerAPI:
         try:
             nglyph_path = os.path.join(work_dir, f"{base_name}.nglyph")
             
-            # Generate NGlyph with cutoff parameters
-            self._process_audio(
-                audio_path, conf, nglyph_path,
-                cutoff_threshold=cutoff_threshold,
-                cutoff_trigger=cutoff_trigger
-            )
+            # Generate NGlyph - use adaptive processing if enabled
+            if adaptive_zoom:
+                # Determine progress zones based on phone model structure
+                # Each phone has a different "progress bar" layout:
+                # - np1: zones 7-14 (8 zones) are battery bar progress
+                # - np2: zones 8-15 (8 zones) are battery bar progress  
+                # - np2a: zones 0-23 (24 zones) are the main spectrum
+                # - np3a: zones 0-35 (36 zones) are ALL spectrum (entire display is progress bar)
+                # - np1s: only 5 zones, no real progress bar (zones 2-4)
+                
+                # (num_zones, start_index) for each phone
+                progress_config = {
+                    "np1":  (8, 7),    # Battery bar: zones 7-14
+                    "np1s": (3, 2),    # Simplified: zones 2-4
+                    "np2":  (8, 8),    # Battery bar: zones 8-15
+                    "np2a": (24, 0),   # Main spectrum: zones 0-23
+                    "np3a": (36, 0),   # Entire display: zones 0-35
+                }
+                num_progress_zones, progress_zone_start = progress_config.get(
+                    phone_model, (len(conf["zones"]), 0)
+                )
+                
+                self._process_audio_adaptive(
+                    audio_path, conf, nglyph_path,
+                    cutoff_threshold=cutoff_threshold,
+                    cutoff_trigger=cutoff_trigger,
+                    num_progress_zones=num_progress_zones,
+                    progress_zone_start=progress_zone_start,
+                    transition_time=0.5
+                )
+            else:
+                self._process_audio(
+                    audio_path, conf, nglyph_path,
+                    cutoff_threshold=cutoff_threshold,
+                    cutoff_trigger=cutoff_trigger
+                )
             
             if nglyph_only:
                 # Copy nglyph to output location
