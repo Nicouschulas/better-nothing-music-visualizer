@@ -30,6 +30,7 @@ import time
 import tempfile
 import shutil
 import soundfile as sf
+from typing import Optional, Tuple  # added typing
 
 # Editable ffmpeg conversion settings (tweak these as needed)
 CONVERT_SETTINGS = {
@@ -138,7 +139,8 @@ def compute_raw_matrix(samples, sr, zones, fps):
         start = i * hop
         frame = samples[start:start+win_len]
         if frame.size < win_len:
-            frame = np.pad(frame, (0, win_len - frame.size))
+            pad_width: Tuple[int, int] = (0, int(win_len - int(frame.size)))
+            frame = np.pad(frame, pad_width)
         spec = np.abs(rfft(frame * win, n=nfft))
 
         # accept zone entries like [low, high] or [low, high, "description"]
@@ -223,43 +225,117 @@ def apply_stable_and_smooth(linear, decay_alpha, amp_conf):
     print()
     return np.vstack(rows)
 
+# new helper: map per-zone brightness using optional zone[3]=low_percent and zone[4]=high_percent
+def apply_zone_percent_mapping(linear: np.ndarray, zones, linear_max: float = 5000.0) -> np.ndarray:
+    """
+    Apply per-zone percent mapping on the pre-smoothed 'linear' matrix.
+    - linear: (n_frames, n_zones) float array in range ~0..linear_max (default 5000)
+    - zones: list of zone entries where zone[3]=low_percent, zone[4]=high_percent (optional)
+
+    Behaviour:
+      perc = (linear_value / linear_max) * 100
+      if perc <= low -> mapped_linear = 0
+      if perc >= high -> mapped_linear = linear_max
+      else -> mapped_linear = ((perc - low)/(high - low)) * linear_max
+
+    Returns mapped linear array in the same scale as 'linear' (float).
+    """
+    if linear.size == 0:
+        return linear
+    src = linear.astype(np.float64)
+    out = src.copy()
+    n_frames, n_zones = out.shape
+
+    def _parse_percent(v):
+        try:
+            if isinstance(v, str):
+                s = v.strip()
+                if s.endswith('%'):
+                    s = s[:-1].strip()
+                val = float(s)
+            else:
+                val = float(v)
+        except Exception:
+            return None
+        if 0.0 <= val <= 1.0:
+            return val * 100.0
+        return val
+
+    for zi, zone in enumerate(zones):
+        if not (isinstance(zone, (list, tuple)) and len(zone) >= 5):
+            continue
+        low = _parse_percent(zone[3])
+        high = _parse_percent(zone[4])
+        if low is None or high is None:
+            continue
+        low = max(0.0, min(100.0, low))
+        high = max(0.0, min(100.0, high))
+        if low > high:
+            low, high = high, low
+
+        percents = (src[:, zi] / float(linear_max)) * 100.0
+        if high == low:
+            mask_hi = percents >= high
+            out[:, zi] = 0.0
+            out[mask_hi, zi] = float(linear_max)
+            continue
+
+        below = percents <= low
+        above = percents >= high
+        between = (~below) & (~above)
+
+        out[below, zi] = 0.0
+        out[above, zi] = float(linear_max)
+        if np.any(between):
+            out[between, zi] = ((percents[between] - low) / (high - low)) * float(linear_max)
+
+    return out
+
 # ------------------ main processing ------------------
 def process(audio_path, conf, out_nglyph_path):
     # --- config
-    fps = 60  # FPS is fixed to 60 
-    phone_model = conf.get("phone_model")
-    decay_alpha = conf.get("decay_alpha")
-    zones = conf["zones"]
-    amp_conf = conf.get("amp")
+     fps = 60  # FPS is fixed to 60 
+     phone_model = conf.get("phone_model")
+     decay_alpha = conf.get("decay_alpha")
+     zones = conf["zones"]
+     amp_conf = conf.get("amp")
+ 
+     # --- audio analysis
+     samples, sr = load_audio_mono(audio_path)
+ 
+     # compute raw matrix
+     raw, n_frames = compute_raw_matrix(samples, sr, zones, fps)
+     print(f"[+] sr={sr}, frames={n_frames}")
+ 
+     # normalize to quadratic linear 0..5000
+     linear = normalize_to_quadratic(raw)
+ 
+    # apply per-zone percent mapping (optional zone[3], zone[4]) BEFORE smoothing
+     try:
+         linear = apply_zone_percent_mapping(linear, zones, linear_max=5000.0)
+     except Exception as e:
+         print(f"[!] Warning: zone percent mapping failed: {e}")
+  
+     # apply single-file stable multiplier + smoothing per-frame (realtime-capable)
+     final = apply_stable_and_smooth(linear, decay_alpha, amp_conf)
+ 
+     # --- write NGlyph
+     author_rows = [",".join(map(str, row)) + "," for row in final]
+     ng = {
+         "VERSION": 1,
+         "PHONE_MODEL": phone_model,
+         "AUTHOR": author_rows,
+         "CUSTOM1": ["1-0", "1050-1"]
+     }
+ 
+     with open(out_nglyph_path, "w", encoding="utf-8") as f:
+         json.dump(ng, f, indent=4)
+     print(f"[+] Saved NGlyph: {out_nglyph_path}")
+     return out_nglyph_path
 
-    # --- audio analysis
-    samples, sr = load_audio_mono(audio_path)
-
-    # compute raw matrix
-    raw, n_frames = compute_raw_matrix(samples, sr, zones, fps)
-    print(f"[+] sr={sr}, frames={n_frames}")
-
-    # normalize to quadratic linear 0..5000
-    linear = normalize_to_quadratic(raw)
-
-    # apply single-file stable multiplier + smoothing per-frame (realtime-capable)
-    final = apply_stable_and_smooth(linear, decay_alpha, amp_conf)
-
-    # --- write NGlyph
-    author_rows = [",".join(map(str, row)) + "," for row in final]
-    ng = {
-        "VERSION": 1,
-        "PHONE_MODEL": phone_model,
-        "AUTHOR": author_rows,
-        "CUSTOM1": ["1-0", "1050-1"]
-    }
-
-    with open(out_nglyph_path, "w", encoding="utf-8") as f:
-        json.dump(ng, f, indent=4)
-    print(f"[+] Saved NGlyph: {out_nglyph_path}")
-    return out_nglyph_path
-
-def run_glyphmodder_write(nglyph_path, ogg_path, title=None, cwd=None):
+def run_glyphmodder_write(nglyph_path: str, ogg_path: str, title: Optional[str] = None, cwd: Optional[str] = None) -> str:
+    if not isinstance(ogg_path, str) or not ogg_path:
+        raise ValueError("ogg_path must be a non-empty string")
     if title is None:
         title = os.path.splitext(os.path.basename(nglyph_path))[0]
     # locate GlyphModder.py in the parent directory of this script
@@ -271,7 +347,7 @@ def run_glyphmodder_write(nglyph_path, ogg_path, title=None, cwd=None):
     if not os.path.isfile(glyphmodder_path):
         print(f"GlyphModder.py not found in parent directory or working directory. Searched: {glyphmodder_path}")
         print("Downloading GlyphModder.py from SebiAI's GitHub repository...")
-        download_glyphmodder_to_cwd(overwrite=1) 
+        download_glyphmodder_to_cwd(overwrite=True)
         print(f"[+] Proceeding with the downloaded GlyphModder.py from cwd.")
         
     # ensure NGlyph is an absolute path (so GlyphModder can find it from any cwd)
@@ -279,6 +355,8 @@ def run_glyphmodder_write(nglyph_path, ogg_path, title=None, cwd=None):
 
     # if we run with cwd set to the output dir, pass only the basename for the ogg
     arg_ogg = os.path.basename(ogg_path) if cwd else ogg_path
+    if not isinstance(arg_ogg, str) or not arg_ogg:
+        raise ValueError("Computed arg_ogg is not a valid string")
 
     cmd = [sys.executable, glyphmodder_path, "write", "--auto-fix-audio", "-t", title, arg_nglyph, arg_ogg]
     print("[+] Running GlyphModder:", " ".join(cmd), f"(cwd={cwd or os.getcwd()})")
@@ -293,7 +371,7 @@ def run_glyphmodder_write(nglyph_path, ogg_path, title=None, cwd=None):
     return final_ogg_path
 
 # new helper: ensure GlyphModder.py exists in current directory (download from SebiAI if needed)
-def download_glyphmodder_to_cwd(overwrite=False, attempts=2, backoff=1.0):
+def download_glyphmodder_to_cwd(overwrite: bool = False, attempts: int = 2, backoff: float = 1.0) -> bool:
     """
     Try to download GlyphModder.py from SebiAI's GitHub raw URLs into cwd.
     If overwrite is False and a file already exists, do nothing.
@@ -461,8 +539,13 @@ class GlyphVisualizerAPI:
 
         # Vectorized normalization + smoothing pipeline
         linear = normalize_to_quadratic(raw)  # float matrix
+        try:
+            linear = apply_zone_percent_mapping(linear, zones, linear_max=5000.0)
+        except Exception as e:
+            print(f"[!] Warning: zone percent mapping failed in API: {e}")
         final = apply_stable_and_smooth(linear, decay_alpha, amp_conf)  # int matrix
 
+        # --- write NGlyph
         author_rows = [",".join(map(str, row)) + "," for row in final]
         ng = {
             "VERSION": 1,
