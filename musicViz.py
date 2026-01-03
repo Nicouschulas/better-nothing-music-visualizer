@@ -24,27 +24,90 @@ import os, sys, json, subprocess
 import numpy as np
 from scipy.fft import rfft, rfftfreq
 from scipy.signal import get_window
-from pydub import AudioSegment
 import urllib.request
 import urllib.error
 import time
+import tempfile
+import shutil
+import soundfile as sf
+
+# Editable ffmpeg conversion settings (tweak these as needed)
+CONVERT_SETTINGS = {
+    "ffmpeg_bin": "ffmpeg",  # path to ffmpeg binary
+    "quality": 7,            # -q:a for libvorbis (0..10), ignored for libopus
+    "bitrate": None,         # e.g. "128k" (used for libopus or if you prefer bitrate over quality)
+    "sample_rate": None,     # e.g. 48000 or None to keep source
+    "channels": None,        # e.g. 2 or 1 or None to keep source
+    "extra_args": []         # additional ffmpeg args list, e.g. ["-vn", "-map_metadata", "-1"]
+}
 
 # ------------------ helpers ------------------
 def convert_to_ogg(input_path, output_path):
-    """Convert any audio file to OGG format using pydub."""
-    print(f"[+] Converting '{input_path}' to OGG -> '{output_path}'")
-    audio = AudioSegment.from_file(input_path)
-    audio.export(output_path, format="ogg")
+    """
+    Convert any audio file to OGG using ffmpeg with settings from CONVERT_SETTINGS.
+    The function signature is unchanged so existing callers still work.
+    """
+    ffmpeg = CONVERT_SETTINGS.get("ffmpeg_bin", "ffmpeg")
+    quality = CONVERT_SETTINGS.get("quality")
+    bitrate = CONVERT_SETTINGS.get("bitrate")
+    sr = CONVERT_SETTINGS.get("sample_rate")
+    channels = CONVERT_SETTINGS.get("channels")
+    extra = CONVERT_SETTINGS.get("extra_args", []) or []
+
+    cmd = [ffmpeg, "-y", "-i", input_path]
+
+    if sr is not None:
+        cmd += ["-ar", str(int(sr))]
+    if channels is not None:
+        cmd += ["-ac", str(int(channels))]
+
+    cmd += ["-c:a", "libopus"]
+    if bitrate:
+        cmd += ["-b:a", str(bitrate)]
+    elif quality is not None:
+        # map quality to bitrate fallback if desired; default to 96k..192k mapping could be added
+        cmd += ["-b:a", f"{int(quality)*16}k"]
+  
+    # append any user-specified extra ffmpeg args
+    cmd += list(extra)
+    cmd += [output_path]
+    print(f"[+] Converting with ffmpeg: {' '.join(cmd)}")
+    res = subprocess.run(cmd, capture_output=True, text=True)
+    if res.returncode != 0:
+        print(res.stdout)
+        print(res.stderr)
+        raise RuntimeError(f"ffmpeg conversion failed for {input_path}")
     print(f"[+] Conversion complete: {output_path}")
     return output_path
 
 def load_audio_mono(path):
-    seg = AudioSegment.from_file(path)
-    sr = seg.frame_rate
-    samples = np.array(seg.get_array_of_samples(), dtype=np.float32)
-    if seg.channels == 2:
-        samples = samples.reshape((-1, 2)).mean(axis=1)
-    samples /= float(2 ** (seg.sample_width * 8 - 1))
+    """
+    Load audio using soundfile and return (mono_samples, sr).
+    Falls back to ffmpeg->wav if soundfile cannot read the source format.
+    Samples are float32 in [-1, 1].
+    """
+    try:
+        data, sr = sf.read(path, dtype='float32', always_2d=False)
+    except Exception:
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
+        tmp.close()
+        try:
+            subprocess.run(
+                ["ffmpeg", "-y", "-i", path, tmp.name],
+                check=True, capture_output=True, text=True
+            )
+            data, sr = sf.read(tmp.name, dtype='float32', always_2d=False)
+        finally:
+            try:
+                os.unlink(tmp.name)
+            except Exception:
+                pass
+
+    # Ensure mono
+    if data.ndim == 2 and data.shape[1] > 1:
+        samples = data.mean(axis=1).astype(np.float32)
+    else:
+        samples = data.flatten().astype(np.float32)
     return samples, sr
 
 def next_pow2(n):
@@ -310,6 +373,182 @@ def validate_amp_conf(amp_conf):
             except Exception:
                 raise ValueError(f"amp.{k} must be numeric (got {repr(v)})")
     return coerced
+
+
+
+
+# ---------------- api ------------------
+# Lightweight, efficient API: removed adaptive zoom and threshold machinery.
+# Relies on the standard pipeline: compute_raw_matrix -> normalize_to_quadratic -> apply_stable_and_smooth
+
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+class GlyphVisualizerAPI:
+    """
+    Simplified API for generating Nothing Phone glyph visualizer OGG files.
+    Uses the main processing pipeline from this module. Adaptive zoom and
+    per-frame thresholding removed for simplicity and speed.
+    """
+
+    def __init__(self, zones_config_path: str = None):
+        if zones_config_path is None:
+            zones_config_path = os.path.join(_SCRIPT_DIR, "zones.config")
+        if not os.path.isfile(zones_config_path):
+            raise FileNotFoundError(f"zones.config not found at: {zones_config_path}")
+        self.zones_config_path = zones_config_path
+        self._load_config()
+
+    def _load_config(self):
+        with open(self.zones_config_path, "r", encoding="utf-8") as f:
+            self.raw_config = json.load(f)
+        self.global_amp = self.raw_config.get("amp")
+        if self.global_amp is None:
+            raise ValueError("zones.config must include a top-level 'amp' object")
+        raw_decay = self.raw_config.get("decay-alpha") or self.raw_config.get("decay_alpha")
+        self.global_decay = float(raw_decay) if raw_decay is not None else None
+        self.phone_configs = {
+            k: v for k, v in self.raw_config.items()
+            if k != "amp" and isinstance(v, dict)
+        }
+
+    def get_available_phones(self) -> list:
+        return list(self.phone_configs.keys())
+
+    def get_phone_info(self, phone_key: str) -> dict:
+        if phone_key not in self.phone_configs:
+            raise ValueError(f"Unknown phone key: {phone_key}")
+        conf = self.phone_configs[phone_key]
+        return {
+            "key": phone_key,
+            "description": conf.get("description", ""),
+            "phone_model": conf.get("phone_model", "UNKNOWN"),
+            "zone_count": len(conf.get("zones", []))
+        }
+
+    def _prepare_config(self, phone_key: str) -> dict:
+        if phone_key not in self.phone_configs:
+            raise ValueError(f"Unknown phone key: {phone_key}")
+        conf = dict(self.phone_configs[phone_key])
+        amp_conf = conf.get("amp") if conf.get("amp") is not None else self.global_amp
+        if amp_conf is None:
+            raise ValueError("Missing 'amp' configuration")
+        conf["amp"] = validate_amp_conf(amp_conf)
+        if "decay-alpha" in conf:
+            conf["decay_alpha"] = float(conf["decay-alpha"])
+        elif "decay_alpha" in conf:
+            conf["decay_alpha"] = float(conf["decay_alpha"])
+        elif self.global_decay is not None:
+            conf["decay_alpha"] = self.global_decay
+        else:
+            raise ValueError("Missing 'decay_alpha' configuration")
+        if "zones" not in conf or not isinstance(conf["zones"], list):
+            raise ValueError("Configuration missing 'zones' array")
+        return conf
+
+    def _process_audio(self, audio_path: str, conf: dict, out_nglyph_path: str) -> str:
+        """
+        Process audio using the standard pipeline and write .nglyph.
+        This function avoids extra per-frame Python loops for postprocessing.
+        """
+        fps = 60
+        phone_model = conf.get("phone_model")
+        decay_alpha = conf.get("decay_alpha")
+        zones = conf["zones"]
+        amp_conf = conf.get("amp")
+
+        samples, sr = load_audio_mono(audio_path)
+        raw, n_frames = compute_raw_matrix(samples, sr, zones, fps)
+
+        # Vectorized normalization + smoothing pipeline
+        linear = normalize_to_quadratic(raw)  # float matrix
+        final = apply_stable_and_smooth(linear, decay_alpha, amp_conf)  # int matrix
+
+        author_rows = [",".join(map(str, row)) + "," for row in final]
+        ng = {
+            "VERSION": 1,
+            "PHONE_MODEL": phone_model,
+            "AUTHOR": author_rows,
+            "CUSTOM1": ["1-0", "1050-1"]
+        }
+        with open(out_nglyph_path, "w", encoding="utf-8") as f:
+            json.dump(ng, f, indent=4)
+        return out_nglyph_path
+
+    def generate_glyph_ogg(
+        self,
+        audio_path: str,
+        phone_model: str = "np1",
+        output_path: str = None,
+        title: str = None,
+        nglyph_only: bool = False
+    ) -> str:
+        """
+        Generate glyph OGG (or .nglyph if nglyph_only=True).
+        Simpler call signature and faster internals than the previous API.
+        """
+        if not os.path.isfile(audio_path):
+            raise FileNotFoundError(f"Audio file not found: {audio_path}")
+        conf = self._prepare_config(phone_model)
+        base_name = os.path.splitext(os.path.basename(audio_path))[0]
+        if title is None:
+            title = base_name
+
+        work_dir = tempfile.mkdtemp(prefix="glyph_viz_")
+        try:
+            nglyph_path = os.path.join(work_dir, f"{base_name}.nglyph")
+            self._process_audio(audio_path, conf, nglyph_path)
+
+            if nglyph_only:
+                if output_path is None:
+                    output_path = os.path.join(os.path.dirname(audio_path), f"{base_name}.nglyph")
+                shutil.copy2(nglyph_path, output_path)
+                return output_path
+
+            ogg_path = os.path.join(work_dir, f"{base_name}.ogg")
+            convert_to_ogg(audio_path, ogg_path)
+
+            # Ensure GlyphModder is available in work_dir
+            original_cwd = os.getcwd()
+            os.chdir(work_dir)
+            try:
+                download_glyphmodder_to_cwd(overwrite=False)
+            finally:
+                os.chdir(original_cwd)
+
+            run_glyphmodder_write(nglyph_path, ogg_path, title=title, cwd=work_dir)
+
+            # Find produced file and copy to output_path
+            composed_patterns = [
+                os.path.join(work_dir, f"{base_name}_fixed_composed.ogg"),
+                os.path.join(work_dir, f"{base_name}_composed.ogg"),
+            ]
+            composed_file = next((p for p in composed_patterns if os.path.isfile(p)), None)
+            if not composed_file:
+                raise RuntimeError(f"GlyphModder did not produce expected output. Check work_dir: {work_dir}")
+
+            if output_path is None:
+                output_path = os.path.join(os.path.dirname(audio_path), f"{base_name}_glyph.ogg")
+            shutil.copy2(composed_file, output_path)
+            return output_path
+        finally:
+            try:
+                shutil.rmtree(work_dir)
+            except Exception:
+                pass
+
+# Convenience wrapper (keeps previous simple-call behavior)
+def generate_glyph_ogg(
+    audio_path: str,
+    phone_model: str = "np1",
+    output_path: str = None,
+    title: str = None
+) -> str:
+    api = GlyphVisualizerAPI()
+    return api.generate_glyph_ogg(audio_path, phone_model, output_path, title)
+#-------------------api end-------------------
+
+
+
 
 # ------------------ entrypoint ------------------
 if __name__ == "__main__":
