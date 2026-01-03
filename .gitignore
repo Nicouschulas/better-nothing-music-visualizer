@@ -10,3 +10,5 @@ env/
 .env/
 env3/
 .env3/
+.vscode/
+vscode/

@@ -14,7 +14,7 @@ _VISUALIZER_DIR = os.path.join(os.path.dirname(_SCRIPT_DIR), "better-nothing-mus
 if _VISUALIZER_DIR not in sys.path:
     sys.path.insert(0, _VISUALIZER_DIR)
 
-from glyph_visualizer_api import GlyphVisualizerAPI
+from musicViz import GlyphVisualizerAPI
 
 # Request counter file path
 _COUNTER_FILE = os.path.join(_SCRIPT_DIR, "glyph_request_count.json")
