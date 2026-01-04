@@ -1,3 +1,5 @@
 numpy
 scipy
 pydub
+soundfile
+# for Jetson Orin Nano (JetPack 6.x): pip install cupy-cuda12x

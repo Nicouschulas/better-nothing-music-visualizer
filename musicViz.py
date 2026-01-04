@@ -42,18 +42,82 @@ CONVERT_SETTINGS = {
     "extra_args": []         # additional ffmpeg args list, e.g. ["-vn", "-map_metadata", "-1"]
 }
 
+# ================== JETSON ORIN NANO OPTIMIZATIONS ==================
+# CuPy for GPU-accelerated FFT (requires: pip install cupy-cuda12x for JetPack 6.x)
+try:
+    import cupy as cp
+    from cupyx.scipy.fft import rfft as cp_rfft
+    CUPY_AVAILABLE = True
+except ImportError:
+    CUPY_AVAILABLE = False
+    cp = None
+
+def is_jetson_platform():
+    """Detect if running on NVIDIA Jetson device."""
+    try:
+        with open('/proc/device-tree/model', 'r') as f:
+            model = f.read().lower()
+            return 'jetson' in model
+    except Exception:
+        return False
+
+def get_jetson_model():
+    """Return Jetson model name or None."""
+    try:
+        with open('/proc/device-tree/model', 'r') as f:
+            return f.read().strip('\x00').strip()
+    except Exception:
+        return None
+
+# Auto-detect Jetson at module load
+IS_JETSON = is_jetson_platform()
+if IS_JETSON:
+    _model = get_jetson_model()
+    print(f"[+] Jetson platform detected: {_model}")
+    if CUPY_AVAILABLE:
+        try:
+            # Try to get device name safely
+            dev_id = cp.cuda.Device().id
+            # On some Jetson CuPy builds, .name might be missing or bytes
+            # cp.cuda.runtime.getDeviceProperties(dev_id) returns a dict
+            props = cp.cuda.runtime.getDeviceProperties(dev_id)
+            dev_name = props.get('name', b'Unknown GPU').decode('utf-8', 'ignore')
+            print(f"[+] CuPy GPU acceleration enabled (CUDA device: {dev_name})")
+        except Exception as e:
+            print(f"[+] CuPy GPU acceleration enabled (Device detection error: {e})")
+    else:
+        print("[!] CuPy not installed - FFT will use CPU. Install with: pip install cupy-cuda12x")
+
+# Jetson Orin Nano optimized FFmpeg settings (6-core ARM, no NVENC)
+CONVERT_SETTINGS_JETSON = {
+    "ffmpeg_bin": "ffmpeg",
+    "quality": 7,
+    "bitrate": "112k",           # Balanced quality/speed for Opus
+    "sample_rate": 48000,        # Opus optimal rate
+    "channels": 2,
+    "extra_args": [
+        "-threads", "6",         # Use all 6 ARM Cortex-A78AE cores
+        "-compression_level", "5",  # Lower Opus complexity (default 10, range 0-10)
+    ]
+}
+# =====================================================================
+
 # ------------------ helpers ------------------
 def convert_to_ogg(input_path, output_path):
     """
     Convert any audio file to OGG using ffmpeg with settings from CONVERT_SETTINGS.
+    Automatically uses Jetson-optimized settings when detected.
     The function signature is unchanged so existing callers still work.
     """
-    ffmpeg = CONVERT_SETTINGS.get("ffmpeg_bin", "ffmpeg")
-    quality = CONVERT_SETTINGS.get("quality")
-    bitrate = CONVERT_SETTINGS.get("bitrate")
-    sr = CONVERT_SETTINGS.get("sample_rate")
-    channels = CONVERT_SETTINGS.get("channels")
-    extra = CONVERT_SETTINGS.get("extra_args", []) or []
+    # Use Jetson settings if on Jetson platform
+    settings = CONVERT_SETTINGS_JETSON if IS_JETSON else CONVERT_SETTINGS
+    
+    ffmpeg = settings.get("ffmpeg_bin", "ffmpeg")
+    quality = settings.get("quality")
+    bitrate = settings.get("bitrate")
+    sr = settings.get("sample_rate")
+    channels = settings.get("channels")
+    extra = settings.get("extra_args", []) or []
 
     # -vn: strip video streams (album art/covers that break Nothing Composer)
     # -map_metadata -1: strip source metadata to avoid conflicts
@@ -83,15 +147,93 @@ def convert_to_ogg(input_path, output_path):
     print(f"[+] Conversion complete: {output_path}")
     return output_path
 
+def load_audio_gstreamer(path):
+    """
+    Use GStreamer with hardware acceleration for audio loading on Jetson.
+    Uses NVDEC for video containers with audio, or standard decoding.
+    Returns (samples, sr) or raises RuntimeError.
+    """
+    # GStreamer pipeline:
+    # filesrc -> decodebin (hw accel) -> audioconvert -> audioresample -> appsink
+    # We output raw float32 mono audio at 48kHz (or native if we could detect it, but fixed is safer)
+    
+    # Check if gst-launch-1.0 is available
+    gst_bin = "gst-launch-1.0"
+    if subprocess.call(["which", gst_bin], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) != 0:
+        raise RuntimeError("gst-launch-1.0 not found")
+
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".raw")
+    tmp.close()
+    
+    try:
+        # Pipeline to decode and dump raw samples to file
+        # audio/x-raw,format=F32LE,channels=1,layout=interleaved
+        cmd = [
+            gst_bin, "-q", 
+            "filesrc", f"location={path}", "!",
+            "decodebin", "!",
+            "audioconvert", "!",
+            "audioresample", "!",
+            "audio/x-raw,format=F32LE,channels=1,layout=interleaved", "!",
+            "filesink", f"location={tmp.name}"
+        ]
+        
+        # print(f"[+] Running GStreamer pipeline: {' '.join(cmd)}")
+        res = subprocess.run(cmd, capture_output=True, text=True)
+        if res.returncode != 0:
+            raise RuntimeError(f"GStreamer failed: {res.stderr}")
+            
+        # Read raw data
+        data = np.fromfile(tmp.name, dtype=np.float32)
+        sr = 44100 # Default/fallback if we can't detect, but let's try to be smarter? 
+        # Actually, GStreamer pipeline above doesn't enforce rate, so it might output native rate.
+        # To be safe for FFT, we usually want a known rate or need to detect it.
+        # For simplicity in this script which relies on soundfile/ffmpeg usually:
+        # Let's enforce 48000 in the pipeline to be sure.
+        
+        # Re-run with fixed rate if we want to be sure, or just assume 48000?
+        # Let's enforce 48000 in the pipeline.
+        cmd = [
+            gst_bin, "-q", 
+            "filesrc", f"location={path}", "!",
+            "decodebin", "!",
+            "audioconvert", "!",
+            "audioresample", "!",
+            "audio/x-raw,format=F32LE,rate=48000,channels=1,layout=interleaved", "!",
+            "filesink", f"location={tmp.name}"
+        ]
+        res = subprocess.run(cmd, capture_output=True, text=True)
+        if res.returncode != 0:
+             raise RuntimeError(f"GStreamer failed: {res.stderr}")
+        
+        data = np.fromfile(tmp.name, dtype=np.float32)
+        sr = 48000
+        return data, sr
+
+    finally:
+        if os.path.exists(tmp.name):
+            os.unlink(tmp.name)
+
 def load_audio_mono(path):
     """
     Load audio using soundfile and return (mono_samples, sr).
     Falls back to ffmpeg->wav if soundfile cannot read the source format.
+    On Jetson, attempts GStreamer hardware decoding first.
     Samples are float32 in [-1, 1].
     """
+    # 1. Try GStreamer on Jetson
+    if IS_JETSON:
+        try:
+            # print("[+] Attempting GStreamer hardware decoding...")
+            return load_audio_gstreamer(path)
+        except Exception as e:
+            print(f"[!] GStreamer decoding failed (falling back to CPU): {e}")
+
+    # 2. Try soundfile (CPU)
     try:
         data, sr = sf.read(path, dtype='float32', always_2d=False)
     except Exception:
+        # 3. Fallback to ffmpeg -> wav
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
         tmp.close()
         try:
@@ -124,6 +266,7 @@ def compute_zone_peak(mag, freqs, low, high):
     return float(np.max(mag[idx])) if idx.size else 0.0
 
 # new helper: compute raw per-frame zone peaks (simpler, with light progress)
+# Supports GPU acceleration via CuPy on Jetson platforms
 def compute_raw_matrix(samples, sr, zones, fps):
     hop = int(round(sr / float(fps)))
     win_len = int(round(sr * 0.025))
@@ -131,46 +274,104 @@ def compute_raw_matrix(samples, sr, zones, fps):
     nfft = next_pow2(win_len)
     freqs = rfftfreq(nfft, 1 / sr)
     n_frames = int(np.ceil(len(samples) / hop))
-    print(f"[+] compute_raw_matrix: sr={sr}, hop={hop}, win={win_len}, nfft={nfft}, frames={n_frames}")
+    
+    # Pre-parse zone bounds once
+    zone_bounds = []
+    for zi, zone in enumerate(zones):
+        if not (isinstance(zone, (list, tuple)) and len(zone) >= 2):
+            print(f"[!] Invalid zone entry at index {zi}: {zone!r} -- using 0..0")
+            zone_bounds.append((0.0, 0.0))
+        else:
+            try:
+                low = float(zone[0])
+                high = float(zone[1])
+                if low > high:
+                    low, high = high, low
+                    print(f"[!] Warning: swapped zone bounds for zone {zi} -> low={low}, high={high}")
+                zone_bounds.append((low, high))
+            except Exception:
+                print(f"[!] Invalid numeric bounds for zone {zi}: {zone!r} -- using 0..0")
+                zone_bounds.append((0.0, 0.0))
+    
+    use_gpu = CUPY_AVAILABLE and IS_JETSON
+    if use_gpu:
+        print(f"[+] compute_raw_matrix [GPU]: sr={sr}, hop={hop}, win={win_len}, nfft={nfft}, frames={n_frames}")
+    else:
+        print(f"[+] compute_raw_matrix [CPU]: sr={sr}, hop={hop}, win={win_len}, nfft={nfft}, frames={n_frames}")
+    
     raw = np.zeros((n_frames, len(zones)), dtype=float)
-
-    # light progress: print at roughly 10% increments
     tick = max(1, n_frames // 10)
 
-    for i in range(n_frames):
-        start = i * hop
-        frame = samples[start:start+win_len]
-        if frame.size < win_len:
-            pad_width: Tuple[int, int] = (0, int(win_len - int(frame.size)))
-            frame = np.pad(frame, pad_width)
-        spec = np.abs(rfft(frame * win, n=nfft))
+    if use_gpu:
+        # GPU-accelerated path using CuPy (Vectorized)
+        print(f"[+] compute_raw_matrix [GPU-Vectorized]: Allocating batch matrix ({n_frames}x{win_len})")
+        
+        # 1. Prepare data on GPU
+        # We need to pad the samples to handle the last frame if needed
+        total_len = (n_frames - 1) * hop + win_len
+        if len(samples) < total_len:
+            pad_len = total_len - len(samples)
+            samples = np.pad(samples, (0, pad_len))
+        
+        samples_gpu = cp.asarray(samples, dtype=cp.float32)
+        win_gpu = cp.asarray(win, dtype=cp.float32)
+        freqs_gpu = cp.asarray(freqs)
+        
+        # 2. Create strided view (or manual index) to form (n_frames, win_len) matrix
+        # Using stride_tricks on GPU can be tricky, let's use simple indexing for now
+        # or construct the matrix. Constructing might be memory heavy for very long songs?
+        # 8000 frames * 1200 samples * 4 bytes ~= 38MB. Totally fine for Jetson (8GB).
+        
+        # Create indices: (n_frames, 1) + (1, win_len)
+        starts = cp.arange(n_frames) * hop
+        indices = starts[:, None] + cp.arange(win_len)[None, :]
+        
+        # Gather frames: (n_frames, win_len)
+        frames_gpu = samples_gpu[indices]
+        
+        # 3. Apply window: (n_frames, win_len)
+        frames_gpu *= win_gpu[None, :]
+        
+        # 4. Batch FFT: (n_frames, nfft//2 + 1)
+        # axis=1 is default for rfft
+        spec_gpu = cp.abs(cp_rfft(frames_gpu, n=nfft))
+        
+        # 5. Compute zone peaks (Vectorized)
+        # raw is (n_frames, n_zones)
+        raw_gpu = cp.zeros((n_frames, len(zones)), dtype=cp.float32)
+        
+        for zi, (low, high) in enumerate(zone_bounds):
+            # Create mask for this zone: (n_freqs,)
+            mask = (freqs_gpu >= low) & (freqs_gpu <= high)
+            if cp.any(mask):
+                # Max over the frequency axis for this zone
+                # spec_gpu[:, mask] selects columns. Then max(axis=1)
+                # Note: if mask is empty, max throws error, so we check cp.any
+                zone_slice = spec_gpu[:, mask]
+                if zone_slice.shape[1] > 0:
+                    raw_gpu[:, zi] = cp.max(zone_slice, axis=1)
+        
+        # 6. Copy back to CPU
+        raw = cp.asnumpy(raw_gpu)
+        print(f"[+] GPU processing complete.")
+        
+    else:
+        # CPU path (original)
+        for i in range(n_frames):
+            start = i * hop
+            frame = samples[start:start+win_len]
+            if frame.size < win_len:
+                pad_width: Tuple[int, int] = (0, int(win_len - int(frame.size)))
+                frame = np.pad(frame, pad_width)
+            spec = np.abs(rfft(frame * win, n=nfft))
 
-        # accept zone entries like [low, high] or [low, high, "description"]
-        for zi, zone in enumerate(zones):
-            # robust handling: ensure we have at least two numeric bounds
-            if not (isinstance(zone, (list, tuple)) and len(zone) >= 2):
-                print(f"[!] Invalid zone entry at index {zi}: {zone!r} -- using 0..0")
-                low = 0.0
-                high = 0.0
-            else:
-                try:
-                    low = float(zone[0])
-                    high = float(zone[1])
-                except Exception:
-                    print(f"[!] Invalid numeric bounds for zone {zi}: {zone!r} -- using 0..0")
-                    low = 0.0
-                    high = 0.0
+            for zi, (low, high) in enumerate(zone_bounds):
+                raw[i, zi] = compute_zone_peak(spec, freqs, low, high)
 
-            # swap if bounds reversed (user-supplied reversed ranges were producing empty values)
-            if low > high:
-                low, high = high, low
-                print(f"[!] Warning: swapped zone bounds for zone {zi} -> low={low}, high={high}")
-
-            raw[i, zi] = compute_zone_peak(spec, freqs, low, high)
-
-        if (i + 1) % tick == 0 or i == n_frames - 1:
-            pct = int((i + 1) / n_frames * 100)
-            print(f"\r[FFT] {pct}% ({i+1}/{n_frames})", end='', flush=True)
+            if (i + 1) % tick == 0 or i == n_frames - 1:
+                pct = int((i + 1) / n_frames * 100)
+                print(f"\r[FFT] {pct}% ({i+1}/{n_frames})", end='', flush=True)
+    
     print()  # newline after progress
     return raw, n_frames
 
