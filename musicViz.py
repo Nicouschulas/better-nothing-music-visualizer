@@ -575,8 +575,6 @@ def run_glyphmodder_write(nglyph_path: str, ogg_path: str, title: Optional[str] 
     arg_ogg = os.path.abspath(ogg_path)
     
     # DIRECT IMPORT INTEGRATION (Optimization)
-    # Attempt to import GlyphModder and call it directly to avoid subprocess overhead.
-    # This respects "no editing GlyphModder" as we only import it.
     try:
         import sys
         import importlib.util
@@ -597,7 +595,6 @@ def run_glyphmodder_write(nglyph_path: str, ogg_path: str, title: Optional[str] 
         output_dir = cwd if cwd else os.path.dirname(arg_ogg)
         
         # Call write function directly
-        # Note: GlyphModder's write_metadata_to_audio_file might print to stdout/stderr
         GlyphModder.write_metadata_to_audio_file(
             audio_file=audio_file,
             nglyph_file=nglyph_file,
@@ -607,34 +604,39 @@ def run_glyphmodder_write(nglyph_path: str, ogg_path: str, title: Optional[str] 
             auto_fix_audio=True
         )
         
-        # GlyphModder writes to output_dir with same basename
-        # We need to return the path to the composed file.
-        # GlyphModder logic usually produces {basename}.ogg or {basename}_fixed.ogg
-        # Since we passed auto_fix_audio=True, it might have fixed it.
-        # But wait, GlyphModder.write_metadata_to_audio_file writes the METADATA to a new file?
-        # Actually, looking at GlyphModder source, it uses ffmpeg to write to `output_file_path`.
-        # But `write_metadata_to_audio_file` (high level) constructs `output_file_path`?
-        # No, it calls `ffmpeg.write_metadata_to_audio_file(..., output_file, ...)`
-        # Wait, the high level function signature is:
-        # def write_metadata_to_audio_file(audio_file, nglyph_file, output_path, title, ffmpeg, auto_fix_audio)
-        # It calculates `base_filename` and `nglyph_file_path`? No that's `read`.
-        # For `write`, it seems it constructs the output path inside?
-        # Let's look at `write_parser` arguments in GlyphModder: it takes NGLYPH_PATH and AUDIO_PATH.
-        # And `-o` output path.
-        # The `write` subcommand handler (not shown in view_file) calls `write_metadata_to_audio_file`.
-        
-        # To be safe, we return the expected path if it exists.
+        # Determine output file path
+        # GlyphModder appends '_composed' to the filename
         base_name = os.path.splitext(os.path.basename(arg_ogg))[0]
-        possible_out = os.path.join(output_dir, base_name + ".ogg")
+        possible_out = os.path.join(output_dir, base_name + "_composed.ogg")
+        
+        # Check for _fixed_composed.ogg as well (if auto-fix happened)
+        if not os.path.isfile(possible_out):
+             possible_out = os.path.join(output_dir, base_name + "_fixed_composed.ogg")
+
+        # SET ARTIST & ALBUM METADATA (Post-Process)
+        # GlyphModder sets ALBUM to "Glyph Tools v2" and doesn't set ARTIST.
+        # We force both to "Nite <3" for branding.
         if os.path.isfile(possible_out):
+            final_out = os.path.join(output_dir, base_name + "_final.ogg")
+            cmd = [
+                "ffmpeg", "-y", "-i", possible_out,
+                "-metadata", "artist=Nite <3",
+                "-metadata", "album=Nite <3",
+                "-c", "copy", "-map_metadata", "0",
+                final_out
+            ]
+            subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            if os.path.isfile(final_out):
+                os.replace(final_out, possible_out)
+                print(f"[+] Set Artist/Album tags to 'Nite <3'")
+            
             print(f"[+] GlyphModder (Import) produced: {possible_out}")
             return possible_out
             
-        # If we can't find it easily, raise to fallback
-        raise RuntimeError("Could not determine output file from direct import")
+        raise RuntimeError(f"Could not find GlyphModder output. Expected: {possible_out}")
 
     except Exception as e:
-        # Fallback to subprocess if import fails or logic is too complex
+        # Fallback to subprocess if import fails
         # print(f"[!] Direct GlyphModder import failed/skipped: {e}")
         
         arg_ogg_base = os.path.basename(ogg_path) if cwd else ogg_path
@@ -647,6 +649,21 @@ def run_glyphmodder_write(nglyph_path: str, ogg_path: str, title: Optional[str] 
             raise RuntimeError("GlyphModder failed")
         
         final_ogg_path = os.path.join(cwd or os.getcwd(), arg_ogg_base) if cwd else os.path.abspath(arg_ogg_base)
+        
+        # SET ARTIST METADATA (Post-Process for subprocess path)
+        if os.path.isfile(final_ogg_path):
+            temp_final = final_ogg_path + ".tmp.ogg"
+            cmd = [
+                "ffmpeg", "-y", "-i", final_ogg_path,
+                "-metadata", "artist=Nite <3",
+                "-c", "copy", "-map_metadata", "0",
+                temp_final
+            ]
+            subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            if os.path.isfile(temp_final):
+                os.replace(temp_final, final_ogg_path)
+                print(f"[+] Set Artist tag to 'Nite <3'")
+
         print(f"[+] GlyphModder produced: {final_ogg_path}")
         return final_ogg_path
 
