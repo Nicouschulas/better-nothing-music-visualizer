@@ -93,19 +93,13 @@ class ToGlyphComposer(commands.Cog):
     )
     @app_commands.describe(
         audio="Audio file to convert (mp3, m4a, ogg, wav)",
-        phone="Phone model for glyph configuration",
-        cutoff="Brightness cutoff (0-4095). Dim glyphs below this are cut when others are bright. 0=disabled",
-        cutoff_trigger="Brightness threshold (0-4095) that triggers the cutoff. Default 100",
-        adaptive_zoom="Enable dynamic spectrum zoom (focuses on dominant frequencies)"
+        phone="Phone model for glyph configuration"
     )
     async def compose(
         self,
         interaction: discord.Interaction,
         audio: discord.Attachment,
-        phone: Literal["np1", "np1s", "np2", "np2a", "np3a"],
-        cutoff: app_commands.Range[int, 0, 4095] = 0,
-        cutoff_trigger: app_commands.Range[int, 0, 4095] = 100,
-        adaptive_zoom: bool = False
+        phone: Literal["np1", "np1s", "np2", "np2a", "np3a"]
     ):
         """
         Convert an audio file to Nothing Phone Glyph Composer format.
@@ -173,9 +167,6 @@ class ToGlyphComposer(commands.Cog):
                     phone_model=phone,
                     output_path=output_path,
                     title=title,
-                    cutoff_threshold=cutoff,
-                    cutoff_trigger=cutoff_trigger,
-                    adaptive_zoom=adaptive_zoom
                 )
             )
             
