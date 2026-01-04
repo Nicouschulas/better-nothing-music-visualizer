@@ -55,7 +55,9 @@ def convert_to_ogg(input_path, output_path):
     channels = CONVERT_SETTINGS.get("channels")
     extra = CONVERT_SETTINGS.get("extra_args", []) or []
 
-    cmd = [ffmpeg, "-y", "-i", input_path]
+    # -vn: strip video streams (album art/covers that break Nothing Composer)
+    # -map_metadata -1: strip source metadata to avoid conflicts
+    cmd = [ffmpeg, "-y", "-i", input_path, "-vn", "-map_metadata", "-1"]
 
     if sr is not None:
         cmd += ["-ar", str(int(sr))]
