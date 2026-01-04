@@ -30,7 +30,8 @@ import time
 import tempfile
 import shutil
 import soundfile as sf
-from typing import Optional, Tuple  # added typing
+from typing import Optional, Tuple
+from concurrent.futures import ThreadPoolExecutor  # added typing
 
 # Editable ffmpeg conversion settings (tweak these as needed)
 CONVERT_SETTINGS = {
@@ -193,65 +194,35 @@ def load_audio_gstreamer(path):
     Returns (samples, sr) or raises RuntimeError.
     """
     # GStreamer pipeline:
-    # filesrc -> decodebin (hw accel) -> audioconvert -> audioresample -> appsink
-    # We output raw float32 mono audio at 48kHz (or native if we could detect it, but fixed is safer)
+    # filesrc -> decodebin (hw accel) -> audioconvert -> audioresample -> appsink (stdout)
+    # We output raw float32 mono audio at 48kHz
     
     # Check if gst-launch-1.0 is available
     gst_bin = "gst-launch-1.0"
     if subprocess.call(["which", gst_bin], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) != 0:
         raise RuntimeError("gst-launch-1.0 not found")
 
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".raw")
-    tmp.close()
+    # Pipeline to decode and dump raw samples to STDOUT
+    # audio/x-raw,format=F32LE,rate=48000,channels=1,layout=interleaved
+    cmd = [
+        gst_bin, "-q", 
+        "filesrc", f"location={path}", "!",
+        "decodebin", "!",
+        "audioconvert", "!",
+        "audioresample", "!",
+        "audio/x-raw,format=F32LE,rate=48000,channels=1,layout=interleaved", "!",
+        "filesink", "location=/dev/stdout"
+    ]
     
+    # print(f"[+] Running GStreamer pipeline (Zero-Copy): {' '.join(cmd)}")
     try:
-        # Pipeline to decode and dump raw samples to file
-        # audio/x-raw,format=F32LE,channels=1,layout=interleaved
-        cmd = [
-            gst_bin, "-q", 
-            "filesrc", f"location={path}", "!",
-            "decodebin", "!",
-            "audioconvert", "!",
-            "audioresample", "!",
-            "audio/x-raw,format=F32LE,channels=1,layout=interleaved", "!",
-            "filesink", f"location={tmp.name}"
-        ]
-        
-        # print(f"[+] Running GStreamer pipeline: {' '.join(cmd)}")
-        res = subprocess.run(cmd, capture_output=True, text=True)
-        if res.returncode != 0:
-            raise RuntimeError(f"GStreamer failed: {res.stderr}")
-            
-        # Read raw data
-        data = np.fromfile(tmp.name, dtype=np.float32)
-        sr = 44100 # Default/fallback if we can't detect, but let's try to be smarter? 
-        # Actually, GStreamer pipeline above doesn't enforce rate, so it might output native rate.
-        # To be safe for FFT, we usually want a known rate or need to detect it.
-        # For simplicity in this script which relies on soundfile/ffmpeg usually:
-        # Let's enforce 48000 in the pipeline to be sure.
-        
-        # Re-run with fixed rate if we want to be sure, or just assume 48000?
-        # Let's enforce 48000 in the pipeline.
-        cmd = [
-            gst_bin, "-q", 
-            "filesrc", f"location={path}", "!",
-            "decodebin", "!",
-            "audioconvert", "!",
-            "audioresample", "!",
-            "audio/x-raw,format=F32LE,rate=48000,channels=1,layout=interleaved", "!",
-            "filesink", f"location={tmp.name}"
-        ]
-        res = subprocess.run(cmd, capture_output=True, text=True)
-        if res.returncode != 0:
-             raise RuntimeError(f"GStreamer failed: {res.stderr}")
-        
-        data = np.fromfile(tmp.name, dtype=np.float32)
+        res = subprocess.run(cmd, capture_output=True, check=True)
+        # Read raw data directly from stdout buffer
+        data = np.frombuffer(res.stdout, dtype=np.float32)
         sr = 48000
         return data, sr
-
-    finally:
-        if os.path.exists(tmp.name):
-            os.unlink(tmp.name)
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"GStreamer failed: {e.stderr.decode() if e.stderr else 'Unknown error'}")
 
 def load_audio_mono(path):
     """
@@ -881,16 +852,28 @@ class GlyphVisualizerAPI:
         work_dir = tempfile.mkdtemp(prefix="glyph_viz_")
         try:
             nglyph_path = os.path.join(work_dir, f"{base_name}.nglyph")
-            self._process_audio(audio_path, conf, nglyph_path)
-
-            if nglyph_only:
-                if output_path is None:
-                    output_path = os.path.join(os.path.dirname(audio_path), f"{base_name}.nglyph")
-                shutil.copy2(nglyph_path, output_path)
-                return output_path
-
             ogg_path = os.path.join(work_dir, f"{base_name}.ogg")
-            convert_to_ogg(audio_path, ogg_path)
+            
+            # PARALLEL EXECUTION OPTIMIZATION
+            # Run FFT analysis (GPU) and OGG conversion (CPU/NVDEC) in parallel.
+            print(f"[+] Starting Parallel Execution: FFT (GPU) + Encoding (CPU/NVDEC)")
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                future_nglyph = executor.submit(self._process_audio, audio_path, conf, nglyph_path)
+                
+                if not nglyph_only:
+                    future_ogg = executor.submit(convert_to_ogg, audio_path, ogg_path)
+                
+                # Wait for FFT results
+                future_nglyph.result()
+                
+                if nglyph_only:
+                    if output_path is None:
+                        output_path = os.path.join(os.path.dirname(audio_path), f"{base_name}.nglyph")
+                    shutil.copy2(nglyph_path, output_path)
+                    return output_path
+                
+                # Wait for OGG conversion
+                future_ogg.result()
 
             # Ensure GlyphModder is available in work_dir
             original_cwd = os.getcwd()
