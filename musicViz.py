@@ -589,6 +589,14 @@ def run_glyphmodder_write(nglyph_path: str, ogg_path: str, title: Optional[str] 
         audio_file = GlyphModder.AudioFile(arg_ogg, ffmpeg_helper)
         nglyph_file = GlyphModder.NGlyphFile(arg_nglyph)
         
+        # INJECT CUSTOM WATERMARK
+        # This adds the watermark to the OGG metadata without needing to encrypt the .nglyph file
+        try:
+            nglyph_file.watermark = GlyphModder.Watermark("Nite <3")
+            print(f"[+] Injected custom watermark: 'Nite <3'")
+        except Exception as e:
+            print(f"[!] Failed to inject watermark: {e}")
+        
         output_dir = cwd if cwd else os.path.dirname(arg_ogg)
         
         # Call write function directly
