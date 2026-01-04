@@ -141,12 +141,14 @@ def convert_to_ogg(input_path, output_path):
     The function signature is unchanged so existing callers still work.
     """
     # 1. Try GStreamer on Jetson first (Hardware Decoding)
-    if IS_JETSON:
-        try:
-            # Default to 112k bitrate for GStreamer path
-            return convert_to_ogg_gstreamer(input_path, output_path, bitrate="112000")
-        except Exception as e:
-            print(f"[!] GStreamer conversion failed (falling back to FFmpeg): {e}")
+    # DISABLED: GStreamer OGG muxing was leaking metadata/album art, causing "File not created by Composer" errors.
+    # Reverting to FFmpeg (with Jetson optimizations) ensures clean files via -map_metadata -1.
+    # if IS_JETSON:
+    #    try:
+    #        # Default to 112k bitrate for GStreamer path
+    #        return convert_to_ogg_gstreamer(input_path, output_path, bitrate="112000")
+    #    except Exception as e:
+    #        print(f"[!] GStreamer conversion failed (falling back to FFmpeg): {e}")
 
     # 2. Fallback to FFmpeg (Software)
     # Use Jetson settings if on Jetson platform
