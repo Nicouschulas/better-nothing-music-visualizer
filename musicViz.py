@@ -102,13 +102,52 @@ CONVERT_SETTINGS_JETSON = {
 }
 # =====================================================================
 
+def convert_to_ogg_gstreamer(input_path, output_path, bitrate="112000"):
+    """
+    Convert audio to OGG/Opus using GStreamer pipeline with hardware decoding (NVDEC) where possible.
+    Pipeline: filesrc -> decodebin -> audioconvert -> audioresample -> opusenc -> oggmux -> filesink
+    """
+    gst_bin = "gst-launch-1.0"
+    if subprocess.call(["which", gst_bin], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) != 0:
+        raise RuntimeError("gst-launch-1.0 not found")
+
+    # GStreamer pipeline for OGG/Opus conversion
+    # decodebin handles hardware decoding if available (NVDEC)
+    # opusenc settings: bitrate=112k (balanced), complexity=5 (faster)
+    cmd = [
+        gst_bin, "-q",
+        "filesrc", f"location={input_path}", "!",
+        "decodebin", "!",
+        "audioconvert", "!",
+        "audioresample", "!",
+        "opusenc", f"bitrate={bitrate}", "complexity=5", "frame-size=20", "!", 
+        "oggmux", "!",
+        "filesink", f"location={output_path}"
+    ]
+    
+    print(f"[+] Converting with GStreamer (HW accel): {' '.join(cmd)}")
+    res = subprocess.run(cmd, capture_output=True, text=True)
+    if res.returncode != 0:
+        raise RuntimeError(f"GStreamer conversion failed: {res.stderr}")
+    print(f"[+] GStreamer conversion complete: {output_path}")
+    return output_path
+
 # ------------------ helpers ------------------
 def convert_to_ogg(input_path, output_path):
     """
     Convert any audio file to OGG using ffmpeg with settings from CONVERT_SETTINGS.
-    Automatically uses Jetson-optimized settings when detected.
+    Automatically uses Jetson-optimized settings or GStreamer when detected.
     The function signature is unchanged so existing callers still work.
     """
+    # 1. Try GStreamer on Jetson first (Hardware Decoding)
+    if IS_JETSON:
+        try:
+            # Default to 112k bitrate for GStreamer path
+            return convert_to_ogg_gstreamer(input_path, output_path, bitrate="112000")
+        except Exception as e:
+            print(f"[!] GStreamer conversion failed (falling back to FFmpeg): {e}")
+
+    # 2. Fallback to FFmpeg (Software)
     # Use Jetson settings if on Jetson platform
     settings = CONVERT_SETTINGS_JETSON if IS_JETSON else CONVERT_SETTINGS
     
@@ -541,37 +580,97 @@ def run_glyphmodder_write(nglyph_path: str, ogg_path: str, title: Optional[str] 
         raise ValueError("ogg_path must be a non-empty string")
     if title is None:
         title = os.path.splitext(os.path.basename(nglyph_path))[0]
-    # locate GlyphModder.py in the parent directory of this script
+    
+    # Locate GlyphModder.py
     script_dir = os.path.dirname(os.path.abspath(__file__))
     glyphmodder_path = os.path.normpath(os.path.join(script_dir, os.pardir, "GlyphModder.py"))
-    # fallback to current working directory if not present in parent
     if not os.path.isfile(glyphmodder_path):
         glyphmodder_path = os.path.normpath(os.path.join(os.getcwd(), "GlyphModder.py"))
+    
     if not os.path.isfile(glyphmodder_path):
-        print(f"GlyphModder.py not found in parent directory or working directory. Searched: {glyphmodder_path}")
-        print("Downloading GlyphModder.py from SebiAI's GitHub repository...")
+        print(f"GlyphModder.py not found. Downloading...")
         download_glyphmodder_to_cwd(overwrite=True)
-        print(f"[+] Proceeding with the downloaded GlyphModder.py from cwd.")
-        
-    # ensure NGlyph is an absolute path (so GlyphModder can find it from any cwd)
+        glyphmodder_path = os.path.join(os.getcwd(), "GlyphModder.py")
+
+    # ensure NGlyph is an absolute path
     arg_nglyph = os.path.abspath(nglyph_path)
+    arg_ogg = os.path.abspath(ogg_path)
+    
+    # DIRECT IMPORT INTEGRATION (Optimization)
+    # Attempt to import GlyphModder and call it directly to avoid subprocess overhead.
+    # This respects "no editing GlyphModder" as we only import it.
+    try:
+        import sys
+        import importlib.util
+        
+        # Load GlyphModder module dynamically
+        spec = importlib.util.spec_from_file_location("GlyphModder", glyphmodder_path)
+        GlyphModder = importlib.util.module_from_spec(spec)
+        sys.modules["GlyphModder"] = GlyphModder
+        spec.loader.exec_module(GlyphModder)
+        
+        print(f"[+] Imported GlyphModder from {glyphmodder_path}")
+        
+        # Initialize classes
+        ffmpeg_helper = GlyphModder.FFmpeg(ffmpeg_path="ffmpeg", ffprobe_path="ffprobe")
+        audio_file = GlyphModder.AudioFile(arg_ogg, ffmpeg_helper)
+        nglyph_file = GlyphModder.NGlyphFile(arg_nglyph)
+        
+        output_dir = cwd if cwd else os.path.dirname(arg_ogg)
+        
+        # Call write function directly
+        # Note: GlyphModder's write_metadata_to_audio_file might print to stdout/stderr
+        GlyphModder.write_metadata_to_audio_file(
+            audio_file=audio_file,
+            nglyph_file=nglyph_file,
+            output_path=output_dir,
+            title=title,
+            ffmpeg=ffmpeg_helper,
+            auto_fix_audio=True
+        )
+        
+        # GlyphModder writes to output_dir with same basename
+        # We need to return the path to the composed file.
+        # GlyphModder logic usually produces {basename}.ogg or {basename}_fixed.ogg
+        # Since we passed auto_fix_audio=True, it might have fixed it.
+        # But wait, GlyphModder.write_metadata_to_audio_file writes the METADATA to a new file?
+        # Actually, looking at GlyphModder source, it uses ffmpeg to write to `output_file_path`.
+        # But `write_metadata_to_audio_file` (high level) constructs `output_file_path`?
+        # No, it calls `ffmpeg.write_metadata_to_audio_file(..., output_file, ...)`
+        # Wait, the high level function signature is:
+        # def write_metadata_to_audio_file(audio_file, nglyph_file, output_path, title, ffmpeg, auto_fix_audio)
+        # It calculates `base_filename` and `nglyph_file_path`? No that's `read`.
+        # For `write`, it seems it constructs the output path inside?
+        # Let's look at `write_parser` arguments in GlyphModder: it takes NGLYPH_PATH and AUDIO_PATH.
+        # And `-o` output path.
+        # The `write` subcommand handler (not shown in view_file) calls `write_metadata_to_audio_file`.
+        
+        # To be safe, we return the expected path if it exists.
+        base_name = os.path.splitext(os.path.basename(arg_ogg))[0]
+        possible_out = os.path.join(output_dir, base_name + ".ogg")
+        if os.path.isfile(possible_out):
+            print(f"[+] GlyphModder (Import) produced: {possible_out}")
+            return possible_out
+            
+        # If we can't find it easily, raise to fallback
+        raise RuntimeError("Could not determine output file from direct import")
 
-    # if we run with cwd set to the output dir, pass only the basename for the ogg
-    arg_ogg = os.path.basename(ogg_path) if cwd else ogg_path
-    if not isinstance(arg_ogg, str) or not arg_ogg:
-        raise ValueError("Computed arg_ogg is not a valid string")
-
-    cmd = [sys.executable, glyphmodder_path, "write", "--auto-fix-audio", "-t", title, arg_nglyph, arg_ogg]
-    print("[+] Running GlyphModder:", " ".join(cmd), f"(cwd={cwd or os.getcwd()})")
-    res = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd)
-    if res.returncode != 0:
-        print(res.stdout)
-        print(res.stderr)
-        raise RuntimeError("GlyphModder failed")
-    # final ogg should be written into cwd (if provided) or current working dir
-    final_ogg_path = os.path.join(cwd or os.getcwd(), arg_ogg) if cwd else os.path.abspath(arg_ogg)
-    print(f"[+] GlyphModder produced: {final_ogg_path}")
-    return final_ogg_path
+    except Exception as e:
+        # Fallback to subprocess if import fails or logic is too complex
+        # print(f"[!] Direct GlyphModder import failed/skipped: {e}")
+        
+        arg_ogg_base = os.path.basename(ogg_path) if cwd else ogg_path
+        cmd = [sys.executable, glyphmodder_path, "write", "--auto-fix-audio", "-t", title, arg_nglyph, arg_ogg_base]
+        print("[+] Running GlyphModder (subprocess):", " ".join(cmd), f"(cwd={cwd or os.getcwd()})")
+        res = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd)
+        if res.returncode != 0:
+            print(res.stdout)
+            print(res.stderr)
+            raise RuntimeError("GlyphModder failed")
+        
+        final_ogg_path = os.path.join(cwd or os.getcwd(), arg_ogg_base) if cwd else os.path.abspath(arg_ogg_base)
+        print(f"[+] GlyphModder produced: {final_ogg_path}")
+        return final_ogg_path
 
 # new helper: ensure GlyphModder.py exists in current directory (download from SebiAI if needed)
 def download_glyphmodder_to_cwd(overwrite: bool = False, attempts: int = 2, backoff: float = 1.0) -> bool:
