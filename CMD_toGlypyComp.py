@@ -1,6 +1,7 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
+import discord.ui
 from typing import Literal
 import os
 import sys
@@ -242,9 +243,45 @@ class ToGlyphComposer(commands.Cog):
                 content=credits,
                 embed=embed,
             )
+            
+            # Placeholder for the message to be accessed in callback
+            ephemeral_msg = None
+            
+            async def callback(btn_interaction: discord.Interaction):
+                await btn_interaction.response.defer()
+                try:
+                    if not ephemeral_msg or not ephemeral_msg.attachments:
+                        await btn_interaction.followup.send("Could not find attachment to forward.", ephemeral=True)
+                        return
 
-            # Send another message as ephemeral with the audio (hi sebi if you're checking this out lol)
-            await interaction.followup.send(
+                    # Get URL from the ephemeral message attachment (hosted by Discord)
+                    attachment_url = ephemeral_msg.attachments[0].url
+                    
+                    async with aiohttp.ClientSession() as session:
+                        async with session.get(attachment_url) as resp:
+                            if resp.status == 200:
+                                data = await resp.read()
+                                from io import BytesIO
+                                file_obj = discord.File(BytesIO(data), filename=f"{title}_glyph.ogg")
+                                await btn_interaction.user.send(file=file_obj)
+                            else:
+                                await btn_interaction.followup.send("Failed to retrieve file from Discord.", ephemeral=True)
+                                
+                except Exception as e:
+                    await btn_interaction.followup.send(
+                        f"Error sending OGG to DMs (Maybe you have DMs disabled?)",
+                        ephemeral=True
+                    )
+                    print(f"Error sending OGG to DMs: {str(e)}")
+            
+            view = discord.ui.View()
+            button = discord.ui.Button(label="Get OGG in DMs", style=discord.ButtonStyle.primary)
+            button.callback = callback
+            view.add_item(button)
+            
+            # Send another message as ephemeral with the audio
+            ephemeral_msg = await interaction.followup.send(
+                view=view,
                 file=discord.File(result_path, filename=f"{title}_glyph.ogg"),
                 ephemeral=True
             )
