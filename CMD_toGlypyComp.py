@@ -7,6 +7,7 @@ import sys
 import tempfile
 import aiohttp
 import asyncio
+import time
 
 # Add the visualizer directory to path
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -40,28 +41,44 @@ class ToGlyphComposer(commands.Cog):
             self.visualizer_api = None
             self.available_phones = []
     
-    def _get_request_count(self) -> int:
-        """Get the current request count from file."""
+    def _log_request(self, user_id: int, phone: str, duration_ms: float, file_size: int, audio_len: float = 0.0) -> int:
+        """Log detailed request info and return the new total count."""
+        import json
+        from datetime import datetime
+        
+        entry = {
+            "timestamp": datetime.now().isoformat(),
+            "user_id": user_id,
+            "phone": phone,
+            "processing_time_ms": round(duration_ms, 2),
+            "file_size_bytes": file_size,
+            "audio_length_sec": round(audio_len, 2)
+        }
+        
+        data = {"count": 0, "logs": []}
         try:
             if os.path.isfile(_COUNTER_FILE):
-                import json
                 with open(_COUNTER_FILE, 'r') as f:
                     data = json.load(f)
-                    return data.get('count', 0)
         except Exception:
             pass
-        return 0
-    
-    def _increment_request_count(self) -> int:
-        """Increment and return the new request count."""
-        import json
-        count = self._get_request_count() + 1
+            
+        if "logs" not in data:
+            data["logs"] = []
+            
+        data["logs"].append(entry)
+        data["count"] = len(data["logs"])
+        
+        # Keep only last 1000 logs to avoid infinite growth? 
+        # User asked for tracking, maybe they want history. Let's keep it for now.
+        
         try:
             with open(_COUNTER_FILE, 'w') as f:
-                json.dump({'count': count}, f)
+                json.dump(data, f, indent=2)
         except Exception:
             pass
-        return count
+            
+        return data["count"]
     
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         """Global check for all commands in this Cog."""
@@ -158,6 +175,9 @@ class ToGlyphComposer(commands.Cog):
             # Output path
             output_path = os.path.join(temp_dir, f"{title}_glyph.ogg")
             
+            # Measure processing time
+            start_time = time.time()
+            
             # Run the processing in a thread pool to avoid blocking
             loop = asyncio.get_event_loop()
             result_path = await loop.run_in_executor(
@@ -170,6 +190,8 @@ class ToGlyphComposer(commands.Cog):
                 )
             )
             
+            processing_time_ms = (time.time() - start_time) * 1000
+            
             # Check if output exists
             if not os.path.isfile(result_path):
                 await interaction.followup.send(
@@ -179,7 +201,22 @@ class ToGlyphComposer(commands.Cog):
                 return
             
             # Send the result
-            file_size = os.path.getsize(result_path) / 1024  # KB
+            file_size_bytes = os.path.getsize(result_path)
+            file_size_kb = file_size_bytes / 1024
+            
+            # Estimate audio duration from file size (Opus ~112kbps) or just use 0 if unknown
+            # Better: get it from visualizer API if possible, but for now 0 is fine or approx.
+            # 112kbps = 14KB/s. Duration = Size / 14.
+            audio_duration_sec = file_size_kb / 14.0 
+            
+            # Log detailed request
+            request_num = self._log_request(
+                user_id=interaction.user.id,
+                phone=phone,
+                duration_ms=processing_time_ms,
+                file_size=file_size_bytes,
+                audio_len=audio_duration_sec
+            )
             
             embed = discord.Embed(
                 title="Glyph Composition Ready",
@@ -187,13 +224,12 @@ class ToGlyphComposer(commands.Cog):
                     f"**Original:** {audio.filename}\n"
                     f"**Phone:** {phone} - {phone_info['description']}\n"
                     f"**Zones:** {phone_info['zone_count']}"
+                    f"\n"
+                    f"**Output:** {title}_glyph.ogg\n"
                 ),
                 color=discord.Color.green()
             )
-            embed.set_footer(text=f"Output size: {file_size:.1f}KB")
-            
-            # Increment and get request count
-            request_num = self._increment_request_count()
+            embed.set_footer(text=f"Output size: {file_size_kb:.1f}KB | Time: {processing_time_ms:.0f}ms")
             
             credits = (
                 f"-# Request #{request_num}\n"
@@ -205,7 +241,12 @@ class ToGlyphComposer(commands.Cog):
             await interaction.followup.send(
                 content=credits,
                 embed=embed,
-                file=discord.File(result_path, filename=f"{title}_glyph.ogg")
+            )
+
+            # Send another message as ephemeral with the audio (hi sebi if you're checking this out lol)
+            await interaction.followup.send(
+                file=discord.File(result_path, filename=f"{title}_glyph.ogg"),
+                ephemeral=True
             )
             
         except Exception as e:
