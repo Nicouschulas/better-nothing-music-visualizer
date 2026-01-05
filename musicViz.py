@@ -613,9 +613,6 @@ def run_glyphmodder_write(nglyph_path: str, ogg_path: str, title: Optional[str] 
         if not os.path.isfile(possible_out):
              possible_out = os.path.join(output_dir, base_name + "_fixed_composed.ogg")
 
-        # SET ARTIST & ALBUM METADATA (Post-Process)
-        # GlyphModder sets ALBUM to "Glyph Tools v2" and doesn't set ARTIST.
-        # We force both to "Nite <3" for branding.
         if os.path.isfile(possible_out):
             final_out = os.path.join(output_dir, base_name + "_final.ogg")
             cmd = [
@@ -799,6 +796,53 @@ class GlyphVisualizerAPI:
             "phone_model": conf.get("phone_model", "UNKNOWN"),
             "zone_count": len(conf.get("zones", []))
         }
+    
+    def generate_watermark(self, watermark_text: str, audio_length_ms: int) -> list:
+        """
+        Generate CUSTOM1 data (dots on timeline) to display text in the Glyph Composer.
+        The text is rendered using a 5-row pixel font and scaled to fit the audio duration.
+        """
+        # 5-row font definitions (0=empty, 1=dot)
+        # Each character is a list of columns (top to bottom: row 0 to 4)
+        font = {
+            'N': [[1,1,1,1,1], [0,1,0,0,0], [0,0,1,0,0], [1,1,1,1,1]],
+            'I': [[1,0,0,0,1], [1,1,1,1,1], [1,0,0,0,1]],
+            'T': [[1,0,0,0,0], [1,1,1,1,1], [1,0,0,0,0]],
+            'E': [[1,1,1,1,1], [1,0,1,0,1], [1,0,1,0,1]],
+            ' ': [[0,0,0,0,0], [0,0,0,0,0]],
+            '<': [[0,0,0,0,0], [0,0,1,0,0], [0,1,0,1,0]],
+            '3': [[1,0,0,0,1], [1,0,1,0,1], [0,1,1,1,0]],
+        }
+        
+        # Convert text to columns
+        columns = []
+        for char in watermark_text.upper():
+            if char in font:
+                columns.extend(font[char])
+                columns.append([0,0,0,0,0]) # Spacing between chars
+            else:
+                columns.append([0,0,0,0,0]) # Unknown char space
+
+        if not columns:
+            return []
+
+        # Calculate timing
+        # Map columns to the full duration (0 to audio_length_ms)
+        total_cols = len(columns)
+        if total_cols == 0:
+            return []
+            
+        step_ms = audio_length_ms / total_cols
+        
+        custom1_data = []
+        for col_idx, col in enumerate(columns):
+            timestamp = int(col_idx * step_ms)
+            for row_idx, pixel in enumerate(col):
+                if pixel:
+                    # ID 0 is top, 4 is bottom (or vice versa, usually 0-4)
+                    custom1_data.append(f"{timestamp}-{row_idx}")
+                    
+        return custom1_data
 
     def _prepare_config(self, phone_key: str) -> dict:
         if phone_key not in self.phone_configs:
@@ -819,6 +863,7 @@ class GlyphVisualizerAPI:
         if "zones" not in conf or not isinstance(conf["zones"], list):
             raise ValueError("Configuration missing 'zones' array")
         return conf
+
 
     def _process_audio(self, audio_path: str, conf: dict, out_nglyph_path: str) -> str:
         """
@@ -841,6 +886,12 @@ class GlyphVisualizerAPI:
         except Exception as e:
             print(f"[!] Warning: zone percent mapping failed in API: {e}")
         final = apply_stable_and_smooth(linear, decay_alpha, amp_conf)  # int matrix
+        
+        # Generate Watermark (CUSTOM1)
+        audio_duration_ms = int((len(samples) / sr) * 1000)
+        custom1_data = self.generate_watermark("NITE <3", audio_duration_ms)
+        if not custom1_data:
+            custom1_data = ["1-0", "1050-1"] # Fallback
 
         # --- write NGlyph
         author_rows = [",".join(map(str, row)) + "," for row in final]
@@ -848,7 +899,7 @@ class GlyphVisualizerAPI:
             "VERSION": 1,
             "PHONE_MODEL": phone_model,
             "AUTHOR": author_rows,
-            "CUSTOM1": ["1-0", "1050-1"]
+            "CUSTOM1": custom1_data
         }
         with open(out_nglyph_path, "w", encoding="utf-8") as f:
             json.dump(ng, f, indent=4)
