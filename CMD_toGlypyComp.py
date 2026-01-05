@@ -116,7 +116,7 @@ class ToGlyphComposer(commands.Cog):
         self,
         interaction: discord.Interaction,
         audio: discord.Attachment,
-        phone: Literal["np1", "np1s", "np2", "np2a", "np3a"]
+        phone: Literal["np1", "np1s", "np1b", "np2", "np2a", "np3a"]
     ):
         """
         Convert an audio file to Nothing Phone Glyph Composer format.
