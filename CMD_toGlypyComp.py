@@ -340,6 +340,34 @@ class ToGlyphComposer(commands.Cog):
         
         await interaction.response.send_message(embed=embed)
 
+    @glyphs.command(
+        name="export",
+        description="Export the request log (Restricted Access)"
+    )
+    async def export_logs(self, interaction: discord.Interaction):
+        """Export the usage log file. Only available to specific users."""
+        allowed_ids = [1300502920613335162, 1086040015093649499]
+        
+        if interaction.user.id not in allowed_ids:
+            await interaction.response.send_message(
+                "⛔ Access Denied: You do not have permission to use this command.",
+                ephemeral=True
+            )
+            return
+            
+        if not os.path.isfile(_COUNTER_FILE):
+            await interaction.response.send_message(
+                "No log file found.",
+                ephemeral=True
+            )
+            return
+            
+        await interaction.response.send_message(
+            "Here is the request log:",
+            file=discord.File(_COUNTER_FILE, filename="glyph_requests.json"),
+            ephemeral=True
+        )
+
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(ToGlyphComposer(bot))
