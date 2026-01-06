@@ -50,6 +50,15 @@ This script generates **NGlyph** light animations from any audio file, then runs
 
 👉 **[CLICK HERE to see how to use `musicViz.py`](https://github.com/Aleks-Levet/better-nothing-music-visualizer/wiki/)**
 
+## Supported Models
+Currently these models are supported:
+- Nothing phone (1)
+- Nothing phone (2)
+- Nothing phone (2a)
+- Nothing phone (2a plus)
+- Nothing phone (3a)
+- Nothing phone (3a pro)
+
 ## Join our community
 You want to talk or discuss? [Feel free to jump in and join us in the official discord thread on the nothing server!](https://discord.com/channels/930878214237200394/1434923843239280743)
 
