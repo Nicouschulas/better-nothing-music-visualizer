@@ -3,14 +3,14 @@
 For a lot of people (including me), the *stock Glyph Music Visualization provided by Nothing* feels random.  
 Even if it technically isn’t, the visual response to music just isn’t very obvious. On top of that, the feature isn’t really using the full potential of the Glyph Interface. So that’s why I made my own music visualizer.
 
-What nothings music visualization is using:
+### What nothings music visualization is using:
 
 
 - Only **3 light intensity levels** (roughly a **2-bit PWM depth**)
 - It looks like it runs at around **25 FPS**
 - As mentioned earlier, it feels random most of the time
 
-What mine music visualization is using:
+### What mine music visualization is using:
 
 - It uses the **full 12-bit PWM depth** of the Glyph Interface (**4096 light levels**)
 - Runs at a consistent **60 FPS**
