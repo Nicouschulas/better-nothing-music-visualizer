@@ -3,19 +3,13 @@
 For a lot of people (including me), the *stock Glyph Music Visualization provided by Nothing* feels random.  
 Even if it technically isn’t, the visual response to music just isn’t very obvious. On top of that, the feature isn’t really using the full potential of the Glyph Interface. So that’s why I made my own music visualizer.
 
-### 📱 What nothing's music visualization is using:
-
-
-- Only **3 light intensity levels** (roughly a **2-bit PWM depth**)
-- It looks like it runs at around **25 FPS**
-- As mentioned earlier, it feels random most of the time
-
-### 🚀 What my music visualization is using:
-
-- It uses the **full 12-bit PWM depth** of the Glyph Interface (**4096 light levels**)
-- Runs at a consistent **60 FPS**
-- Uses **fragmented glyphs** and the **15-zone mode** of the Nothing Phone (1)
-- Clearly syncs with the music — unlike Nothing’s, where you really need to focus to notice it
+## ⚖️ Stock vs Better Music Visualizer
+| Feature | Nothing Stock | **Better Music Visualizer** |
+| :--- | :--- | :--- |
+| **Depth** | ~2-bit (3 light levels) | **12-bit (4096 light levels)** |
+| **Frame Rate** | ~25 FPS | **60 FPS** |
+| **Precision** | Feels random | **Syncs with FFT analysis** |
+| **Zones** | Standard | **15-zone support** |
 
 ## 📺 Video demo (early version of the script)
 
