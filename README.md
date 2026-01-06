@@ -40,25 +40,27 @@ The usage is pretty simple and straightforward. Nevertheless, we made a Wiki pag
 ## 📲 Supported Models
 Currently these models are supported:
 - Nothing phone (1)
-- Nothing phone (2)
 - Nothing phone (2a)
 - Nothing phone (2a plus)
 - Nothing phone (3a)
 - Nothing phone (3a pro)
+- Phone 2 support is coming soon!
 
 ## 🤝 Join our community
 You want to talk or discuss? [Feel free to jump in and join us in the official discord thread on the nothing server!](https://discord.com/channels/930878214237200394/1434923843239280743)
 
 ## 🔒 Security
-**Link to the VirusTotal scan can be found here:**  
+**The link to the VirusTotal scan can be found here:**  
 https://www.virustotal.com/gui/url/c92c1ff82b56eb60bfd1e159592d09f949f0ea2d195e01f7f5adbef0e0b0385b?nocache=1
 
 ## 🏗️ Contributing
-Contributions are very welcome!
+Contributions are very welcome! You can:
 - Open issues
 - Submit pull requests
 - Suggest improvements
 - Experiment with new visualization ideas
+- Create new presets
+- Disscuss with the developpers
 
 ### 📈 Star History
 ![Star History](https://api.star-history.com/svg?repos=Aleks-Levet/better-nothing-music-visualizer&type=Date)
