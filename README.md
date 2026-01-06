@@ -41,7 +41,7 @@ and later outputs a **glyphed OGG** file for playback in *Glyph Composer*, *Glyp
   - The synchronized Glyph animation
 
 ## 📖 How to use
-👉 **[CLICK HERE to see how to use `musicViz.py`](https://github.com/Aleks-Levet/better-nothing-music-visualizer/wiki/)**
+The usage is pretty simply and straight forward. Nevertheless, we made a Wiki page which explains the installation, use and configuration in detail. [Just click here to see how to use `musicViz.py`](https://github.com/Aleks-Levet/better-nothing-music-visualizer/wiki/)
 
 ## Supported Models
 Currently these models are supported:
@@ -61,7 +61,6 @@ https://www.virustotal.com/gui/url/c92c1ff82b56eb60bfd1e159592d09f949f0ea2d195e0
 
 ## Contributing
 Contributions are very welcome!
-
 - Open issues
 - Submit pull requests
 - Suggest improvements
