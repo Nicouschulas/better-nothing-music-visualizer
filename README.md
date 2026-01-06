@@ -41,7 +41,7 @@ and later outputs a **glyphed OGG** file for playback in *Glyph Composer*, *Glyp
   - The synchronized Glyph animation
 
 ## 📖 How to use
-The usage is pretty simply and straight forward. Nevertheless, we made a Wiki page which explains the installation, use and configuration in detail. [Just click here to see how to use `musicViz.py`](https://github.com/Aleks-Levet/better-nothing-music-visualizer/wiki/)
+The usage is pretty simply and straight forward. Nevertheless, we made a Wiki page which explains the installation, usage, configuration files in detail and a troubleshooting section. [Just click here to see how to use **musicViz.py**](https://github.com/Aleks-Levet/better-nothing-music-visualizer/wiki/)
 
 ## Supported Models
 Currently these models are supported:
@@ -56,7 +56,7 @@ Currently these models are supported:
 You want to talk or discuss? [Feel free to jump in and join us in the official discord thread on the nothing server!](https://discord.com/channels/930878214237200394/1434923843239280743)
 
 ## 🔒 Security
-🛡️ **VirusTotal scan:**  
+**Link to the VirusTotal scan can be found here:**  
 https://www.virustotal.com/gui/url/c92c1ff82b56eb60bfd1e159592d09f949f0ea2d195e01f7f5adbef0e0b0385b?nocache=1
 
 ## Contributing
