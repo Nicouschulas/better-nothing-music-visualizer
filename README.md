@@ -30,7 +30,7 @@ It then outputs a **glyphed OGG** file for playback in *Glyph Composer*, *Glyphi
   This measures how loud different frequency “zones” are
 - **Downward-only smoothing** is applied to make the animation smoother while preserving responsiveness
 - A `.nglyph` file is generated containing all brightness data  
-  (see the [NGlyph Format](#-the-nglyph-format))
+  (see the [NGlyph Format](https://github.com/SebiAi/custom-nothing-glyph-tools/blob/main/docs/10_The%20NGlyph%20File%20Format.md))
 - **SebiAi’s** `GlyphModder.py` converts the `.nglyph` file into a **glyphed `.ogg` ringtone** playable on **Nothing Phones**, containing both:
   - The audio
   - The synchronized Glyph animation
