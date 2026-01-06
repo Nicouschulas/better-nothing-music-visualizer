@@ -3,7 +3,7 @@
 For a lot of people (including me), the *stock Glyph Music Visualization provided by Nothing* feels random.  
 Even if it technically isn’t, the visual response to music just isn’t very obvious. On top of that, the feature isn’t really using the full potential of the Glyph Interface. So that’s why I made my own music visualizer.
 
-## Stock vs Better Music Visualizer
+## ⚖️ Stock vs Better Music Visualizer
 | Feature | Nothing Stock | **Better Music Visualizer** |
 | :--- | :--- | :--- |
 | **Depth** | ~2-bit (3 light levels) | **12-bit (4096 light levels)** |
