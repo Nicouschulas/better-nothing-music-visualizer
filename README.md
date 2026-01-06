@@ -111,6 +111,8 @@ Contributions are very welcome!
 ---
 ---
 ---
+![Star History](https://api.star-history.com/svg?repos=USER/REPO&type=Date)
+---
 ---
 ---
 
