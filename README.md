@@ -1,22 +1,18 @@
 # Better Nothing Music Visualizer
-
-This script generates **NGlyph** light animations from any audio file, then runs the generated file through *SebiAi’s GlyphModder* to create a **better music visualization on Nothing phones**.  
-
 ## Why does this exist?
 For a lot of people (including me), the *stock Glyph Music Visualization provided by Nothing* feels random.  
-Even if it technically isn’t, the visual response to music just isn’t very obvious. On top of that, the feature isn’t really using the full potential of the Glyph Interface. 
+Even if it technically isn’t, the visual response to music just isn’t very obvious. On top of that, the feature isn’t really using the full potential of the Glyph Interface. So that’s why I made my own music visualizer.
 
-What it is using:
+What nothings music visualization is using:
 
-- Only **3 light intensity levels** are used (roughly a **2-bit PWM depth**)
+
+- Only **3 light intensity levels** (roughly a **2-bit PWM depth**)
 - It looks like it runs at around **25 FPS**
 - As mentioned earlier, it feels random most of the time
 
-So that’s why I made my own music visualizer.
+What mine music visualization is using:
 
-What mine is using:
-
-- Uses the **full 12-bit PWM depth** of the Glyph Interface (**4096 light levels**)
+- It uses the **full 12-bit PWM depth** of the Glyph Interface (**4096 light levels**)
 - Runs at a consistent **60 FPS**
 - Uses **fragmented glyphs** and the **15-zone mode** of the Nothing Phone (1)
 - Clearly syncs with the music — unlike Nothing’s, where you really need to focus to notice it
@@ -29,6 +25,7 @@ Click below to watch the YouTube video:
 [![Watch the video](https://img.youtube.com/vi/pQZAkEl7OqQ/0.jpg)](https://www.youtube.com/watch?v=pQZAkEl7OqQ)
 
 ## Overview
+This script generates **NGlyph** light animations from any audio file, then runs the generated file through *SebiAi’s GlyphModder* to create a **better music visualization on Nothing phones**. 
 
 `musicViz.py` takes an audio file (such as `.mp3`, `.m4a`, or `.ogg`), generates a `.nglyph` file containing the Glyph animations, and outputs a **glyphed OGG** file for playback in:
 
