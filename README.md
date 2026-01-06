@@ -70,6 +70,6 @@ Contributions are very welcome!
 - Suggest improvements
 - Experiment with new visualization ideas
 
-![Star History](https://api.star-history.com/svg?repos=USER/REPO&type=Date)
+![Star History](https://api.star-history.com/svg?repos=Aleks-Levet/better-nothing-music-visualizer&type=Date)
 
 ## 🚧 This repository is still under construction! Feel free to contribute!
