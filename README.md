@@ -29,7 +29,6 @@ Click below to watch the YouTube video:
 and later outputs a **glyphed OGG** file for playback in *Glyph Composer*, *Glyphify* or directly on Nothing phones.
 
 ### How it works (technically)
-
 - **FFT (Fast Fourier Transform)** is used to analyze frequencies in a **20 ms window** for each **16.666 ms frame** (60 FPS), making the visualization more accurate
 - **Frequency ranges** can be defined in `zones.config` and are fully customizable
 - The **brightness** of each glyph is defined by the **peak magnitude** found in its assigned frequency range  
@@ -42,7 +41,6 @@ and later outputs a **glyphed OGG** file for playback in *Glyph Composer*, *Glyp
   - The synchronized Glyph animation
 
 ## 📖 How to use
-
 👉 **[CLICK HERE to see how to use `musicViz.py`](https://github.com/Aleks-Levet/better-nothing-music-visualizer/wiki/)**
 
 ## Supported Models
@@ -58,12 +56,10 @@ Currently these models are supported:
 You want to talk or discuss? [Feel free to jump in and join us in the official discord thread on the nothing server!](https://discord.com/channels/930878214237200394/1434923843239280743)
 
 ## 🔒 Security
-
 🛡️ **VirusTotal scan:**  
 https://www.virustotal.com/gui/url/c92c1ff82b56eb60bfd1e159592d09f949f0ea2d195e01f7f5adbef0e0b0385b?nocache=1
 
 ## Contributing
-
 Contributions are very welcome!
 
 - Open issues
@@ -71,6 +67,7 @@ Contributions are very welcome!
 - Suggest improvements
 - Experiment with new visualization ideas
 
+### Star History
 ![Star History](https://api.star-history.com/svg?repos=Aleks-Levet/better-nothing-music-visualizer&type=Date)
 
 ## 🚧 This repository is still under construction! Feel free to contribute!
