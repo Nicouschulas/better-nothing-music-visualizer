@@ -93,18 +93,10 @@ Contributions are very welcome!
 **Made for Nothing phones, but actually using the Glyph Interface properly.**
 
 ---
-
-# [CLICK HERE to see how to use `MusicViz.py`!](https://github.com/Aleks-Levet/better-nothing-music-visualizer/wiki/)
-
----
 ### [VirusTotal scan here](https://www.virustotal.com/gui/url/c92c1ff82b56eb60bfd1e159592d09f949f0ea2d195e01f7f5adbef0e0b0385b?nocache=1)
 
 ---
----
----
 ![Star History](https://api.star-history.com/svg?repos=USER/REPO&type=Date)
----
----
 ---
 
 # Help me do a proper readme pls
