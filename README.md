@@ -1,6 +1,6 @@
 # Better Nothing Music Visualizer
 ## 🤔 Why does this exist?
-For a lot of people (including me), the *stock Glyph Music Visualization provided by Nothing* feels random.  
+For a lot of people (including me), the *stock Glyph Music Visualiastion provided by Nothing* feels random.  
 Even if it technically isn’t, the visual response to music just isn’t very obvious. On top of that, the feature isn’t really using the full potential of the Glyph Interface. So that’s why I made my own music visualizer.
 
 ## ⚖️ Stock vs Better Music Visualizer
@@ -20,7 +20,7 @@ Click below to watch the YouTube video:
 [![Watch the video](https://img.youtube.com/vi/pQZAkEl7OqQ/0.jpg)](https://www.youtube.com/watch?v=pQZAkEl7OqQ)
 
 ## 🛠️ What does this do ?
-`musicViz.py` takes an audio file (such as `.mp3`, `.m4a`, or `.ogg`), generates a `.nglyph` file containing the Glyph animations, then runs the generated file through [*SebiAi’s GlyphModder*](https://github.com/SebiAi/custom-nothing-glyph-tools/) to create a **better music visualization on Nothing phones**!
+`musicViz.py` takes an audio file (such as `.mp3`, `.m4a`, or `.ogg`), generates a `.nglyph` file containing the Glyph animations, then runs the generated file through [*SebiAi’s GlyphModder*](https://github.com/SebiAi/custom-nothing-glyph-tools/) to create a **better music visualisation on Nothing phones**!
 It then outputs a **glyphed OGG** file for playback in *Glyph Composer*, *Glyphify* or other glyph ringtone players. (A proper Nothing glyph music player app is in the works by the way!)
 
 ### ⚙️ How it works (technically)
