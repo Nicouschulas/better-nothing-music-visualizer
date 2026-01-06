@@ -10,7 +10,7 @@ Even if it technically isn’t, the visual response to music just isn’t very o
 - It looks like it runs at around **25 FPS**
 - As mentioned earlier, it feels random most of the time
 
-### 🚀 What mine music visualization is using:
+### 🚀 What my music visualization is using:
 
 - It uses the **full 12-bit PWM depth** of the Glyph Interface (**4096 light levels**)
 - Runs at a consistent **60 FPS**
@@ -19,7 +19,7 @@ Even if it technically isn’t, the visual response to music just isn’t very o
 
 ## 📺 Video demo (early version of the script)
 
-Here’s a comparison between an early version of this script and Nothing’s stock music visualizer.  
+See the difference in action! Here’s a comparison between an early version of this script and Nothing’s stock music visualizer.
 Click below to watch the YouTube video:
 
 [![Watch the video](https://img.youtube.com/vi/pQZAkEl7OqQ/0.jpg)](https://www.youtube.com/watch?v=pQZAkEl7OqQ)
@@ -41,7 +41,7 @@ and later outputs a **glyphed OGG** file for playback in *Glyph Composer*, *Glyp
   - The synchronized Glyph animation
 
 ## 📖 How to use
-The usage is pretty simply and straight forward. Nevertheless, we made a Wiki page which explains the installation, usage, configuration files in detail and a troubleshooting section. [Just click here to see how to use **musicViz.py**](https://github.com/Aleks-Levet/better-nothing-music-visualizer/wiki/)
+The usage is pretty simple and straightforward. Nevertheless, we made a Wiki page which explains the installation, usage, configuration files in detail and a troubleshooting section. [Just click here to see how to use **musicViz.py**](https://github.com/Aleks-Levet/better-nothing-music-visualizer/wiki/)
 
 ## 📲 Supported Models
 Currently these models are supported:
