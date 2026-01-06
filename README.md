@@ -54,9 +54,7 @@ Click below to watch the YouTube video:
 👉 **[CLICK HERE to see how to use `musicViz.py`](https://github.com/Aleks-Levet/better-nothing-music-visualizer/wiki/)**
 
 ## Join our community
-💬 [This is the Discord thread for the project in the Nothing server.](https://discord.com/channels/930878214237200394/1434923843239280743)  
-Feel free to jump in and join u
-s!
+You want to talk or discuss? [Feel free to jump in and join us in the official discord thread on the nothing server!](https://discord.com/channels/930878214237200394/1434923843239280743)
 
 ## 🔒 Security
 
