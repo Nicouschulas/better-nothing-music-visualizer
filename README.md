@@ -24,16 +24,11 @@ Click below to watch the YouTube video:
 
 [![Watch the video](https://img.youtube.com/vi/pQZAkEl7OqQ/0.jpg)](https://www.youtube.com/watch?v=pQZAkEl7OqQ)
 
-## Overview
-This script generates **NGlyph** light animations from any audio file, then runs the generated file through *SebiAi’s GlyphModder* to create a **better music visualization on Nothing phones**. 
+## What it does
+`musicViz.py` takes an audio file (such as `.mp3`, `.m4a`, or `.ogg`), generates a `.nglyph` file containing the Glyph animations,  then runs the generated file through *SebiAi’s GlyphModder* to create a **better music visualization on Nothing phones** 
+and later outputs a **glyphed OGG** file for playback in *Glyph Composer*, *Glyphify* or directly on Nothing phones.
 
-`musicViz.py` takes an audio file (such as `.mp3`, `.m4a`, or `.ogg`), generates a `.nglyph` file containing the Glyph animations, and outputs a **glyphed OGG** file for playback in:
-
-- *Glyph Composer*
-- *Glyphify*
-- Or directly on Nothing phones
-
-## How it works (technically)
+### How it works (technically)
 
 - **FFT (Fast Fourier Transform)** is used to analyze frequencies in a **20 ms window** for each **16.666 ms frame** (60 FPS), making the visualization more accurate
 - **Frequency ranges** can be defined in `zones.config` and are fully customizable
