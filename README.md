@@ -92,15 +92,6 @@ Contributions are very welcome!
 
 **Made for Nothing phones, but actually using the Glyph Interface properly.**
 
-## How it works:
-
-* **FFT (Fast Fourier Transform)** is used to analyze frequencies in a 20ms window for each 16.666ms frame (60fps), making the visualization more accurate.
-* **Frequency ranges** can be defined in `zones.config` and can be fully customized to your liking.
-* The **brightness** of each glyph is defined by the peak magnitude found in the frequancy range defined in `zones.config`. It measures how loud different frequency ranges (“zones”) are.
-* **Downward-only smoothing** is applied to make it look smoother while preserving reactiveness.
-* A `.nglyph` file is then generated with all the brightness data (see the [NGlyph Format](#-the-nglyph-format)).
-*  **SebiAi's** `GlyphModder.py` then converts the `.nglyph` file to a glyphed `.ogg` *ringtone* playable on **Nothing Phones**, containing the audio and the glyph animation.
-
 ---
 
 # [CLICK HERE to see how to use `MusicViz.py`!](https://github.com/Aleks-Levet/better-nothing-music-visualizer/wiki/)
