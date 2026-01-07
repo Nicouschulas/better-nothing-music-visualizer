@@ -1,6 +1,6 @@
 # Better Nothing Music Visualizer
 ## 🤔 Why does this exist?
-For a lot of people (including me), the *stock Glyph Music Visualization provided by Nothing* feels random.  
+For a lot of people (including me), the *stock Glyph Music Visualiastion provided by Nothing* feels random.  
 Even if it technically isn’t, the visual response to music just isn’t very obvious. On top of that, the feature isn’t really using the full potential of the Glyph Interface. So that’s why I made my own music visualizer.
 
 ## ⚖️ Stock vs Better Music Visualizer
@@ -20,7 +20,7 @@ Click below to watch the YouTube video:
 [![Watch the video](https://img.youtube.com/vi/pQZAkEl7OqQ/0.jpg)](https://www.youtube.com/watch?v=pQZAkEl7OqQ)
 
 ## 🛠️ What does this do ?
-`musicViz.py` takes an audio file (such as `.mp3`, `.m4a`, or `.ogg`), generates a `.nglyph` file containing the Glyph animations, then runs the generated file through [*SebiAi’s GlyphModder*](https://github.com/SebiAi/custom-nothing-glyph-tools/) to create a **better music visualization on Nothing phones**!
+`musicViz.py` takes an audio file (such as `.mp3`, `.m4a`, or `.ogg`), generates a `.nglyph` file containing the Glyph animations, then runs the generated file through [*SebiAi’s GlyphModder*](https://github.com/SebiAi/custom-nothing-glyph-tools/) to create a **better music visualisation on Nothing phones**!
 It then outputs a **glyphed OGG** file for playback in *Glyph Composer*, *Glyphify* or other glyph ringtone players. (A proper Nothing glyph music player app is in the works by the way!)
 
 ### ⚙️ How it works (technically)
@@ -36,7 +36,8 @@ It then outputs a **glyphed OGG** file for playback in *Glyph Composer*, *Glyphi
   - The synchronized Glyph animation
 
 # 📖 How to use ?
-The usage is pretty simple and straightforward. Nevertheless, we made a Wiki page which explains the installation, usage, configuration files in detail and a troubleshooting section. You can also find out how to make new presets. [Just click here to see how to use **musicViz.py** as a python script](https://github.com/Aleks-Levet/better-nothing-music-visualizer/wiki/) You can convert an unlimited number of files in bulk without any trouble!
+The usage is pretty simple and straightforward. Nevertheless, we made a Wiki page which explains the installation, usage, configuration files in detail and a troubleshooting section. You can also find out how to make new presets. [Just click here to see how to use **musicViz.py** as a python script](https://github.com/Aleks-Levet/better-nothing-music-visualizer/wiki/). You know what's cool? You can convert an unlimited number of files in bulk without any trouble!
+
 ### If you want to just try the visualisation and you don't know coding / you're lazy:
 We have a **discord bot** that can easily run the script on any audio file for you! It's one file at a time only, but it's very simple to use and you just need your phone!
  * Go in the [***Custom Nothing Glyph Tools* Discord server**](https://discord.gg/EmcnHqDxZt) 
