@@ -1,9 +1,9 @@
-# Better Nothing Music Visualizer
-## 🤔 Why does this exist?
+# <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Travel%20and%20places/Fire.png" alt="Fire" width="30" height="30" />Better Nothing Music Visualizer
+## <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Smilies/Thinking%20Face.png" alt="Thinking Face" width="25" height="25" /> Why does this exist?
 For a lot of people (including me), the *stock Glyph Music Visualiastion provided by Nothing* feels random.  
 Even if it technically isn’t, the visual response to music just isn’t very obvious. On top of that, the feature isn’t really using the full potential of the Glyph Interface. So that’s why I made my own music visualizer.
 
-## ⚖️ Stock vs Better Music Visualizer
+## <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Balance%20Scale.png" alt="Balance Scale" width="25" height="25" /> Stock vs Better Music Visualizer
 | Feature | Nothing Stock | **Better Music Visualizer** |
 | :--- | :--- | :--- |
 | **Light levels** | ~2-bit depth (3 light levels) | **12-bit depth (4096 light levels)** |
@@ -12,7 +12,7 @@ Even if it technically isn’t, the visual response to music just isn’t very o
 | **Zones** | Standard, full physical glyphs are used | **Each glyph segment and sub-zone is used and controlled independently** |
 | **Visualisation method** | Real-time only | **Realtime with 20ms latency, or pre-processed audio files** |
 
-## 📺 Video demo (early version of the script)
+## <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Musical%20Notes.png" alt="Musical Notes" width="25" height="25" /> Video demo (early version of the script)
 
 See the difference in action! Here’s a comparison between an **early version** of this script and *Nothing’s stock music visualizer*.
 Click below to watch the YouTube video:
@@ -23,7 +23,7 @@ Click below to watch the YouTube video:
 `musicViz.py` takes an audio file (such as `.mp3`, `.m4a`, or `.ogg`), generates a `.nglyph` file containing the Glyph animations, then runs the generated file through [*SebiAi’s GlyphModder*](https://github.com/SebiAi/custom-nothing-glyph-tools/) to create a **better music visualisation on Nothing phones**!
 It then outputs a **glyphed OGG** file for playback in *Glyph Composer*, *Glyphify* or other glyph ringtone players. (A proper Nothing glyph music player app is in the works by the way!)
 
-### ⚙️ How it works (technically)
+### <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Gear.png" alt="Gear" width="25" height="25" /> How it works (technically)
 - **FFT (Fast Fourier Transform)** is used to analyze frequencies in a **20 ms window** for each **16.666 ms frame** (60 FPS), making the visualization more accurate
 - **Frequency ranges** can be defined in `zones.config` and are fully customizable
 - The **brightness** of each glyph is defined by the **peak magnitude** found in its assigned frequency range  
@@ -55,7 +55,7 @@ Currently these models are supported:
 - Nothing phone (3a pro)
 - Phone 2 support is coming soon!
 
-## 🤝 Join our community
+## <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Hand%20gestures/Handshake.png" alt="Handshake" width="25" height="25" /> Join our community
 You want to talk or discuss? [Feel free to jump in and join us in the official discord thread in the Nothing server!](https://discord.com/channels/930878214237200394/1434923843239280743)
 
 ## 🔒 Security
@@ -71,7 +71,7 @@ Contributions are very welcome! You can:
 - Create new presets
 - Disscuss with the developpers
 
-### 📈 Star History
+### <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Travel%20and%20places/Star.png" alt="Star" width="25" height="25" /> Star History
 ![Star History](https://api.star-history.com/svg?repos=Aleks-Levet/better-nothing-music-visualizer&type=Date)
 
 ## 🚧 This repository is still under construction! Feel free to contribute!
