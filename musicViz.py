@@ -343,14 +343,10 @@ def run_glyphmodder_write(nglyph_path: str, ogg_path: str, title: Optional[str] 
         raise ValueError("ogg_path must be a non-empty string")
     if title is None:
         title = os.path.splitext(os.path.basename(nglyph_path))[0]
-    # locate GlyphModder.py in the parent directory of this script
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    glyphmodder_path = os.path.normpath(os.path.join(script_dir, os.pardir, "GlyphModder.py"))
-    # fallback to current working directory if not present in parent
+    # locate GlyphModder.py in the current working directory
+    glyphmodder_path = os.path.normpath(os.path.join(os.getcwd(), "GlyphModder.py"))
     if not os.path.isfile(glyphmodder_path):
-        glyphmodder_path = os.path.normpath(os.path.join(os.getcwd(), "GlyphModder.py"))
-    if not os.path.isfile(glyphmodder_path):
-        print(f"GlyphModder.py not found in parent directory or working directory. Searched: {glyphmodder_path}")
+        print(f"GlyphModder.py not found in working directory. Searched: {glyphmodder_path}")
         print("Downloading GlyphModder.py from SebiAI's GitHub repository...")
         download_glyphmodder_to_cwd(overwrite=True)
         print(f"[+] Proceeding with the downloaded GlyphModder.py from cwd.")
