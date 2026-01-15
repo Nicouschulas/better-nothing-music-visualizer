@@ -164,7 +164,10 @@ def compute_raw_matrix(samples, sr, zones, fps):
                 low, high = high, low
                 print(f"[!] Warning: swapped zone bounds for zone {zi} -> low={low}, high={high}")
 
-            raw[i, zi] = compute_zone_peak(spec, freqs, low, high)
+            if low == 0 and high == 0:
+                raw[i, zi] = 0.0
+            else:
+                raw[i, zi] = compute_zone_peak(spec, freqs, low, high)
 
         if (i + 1) % tick == 0 or i == n_frames - 1:
             pct = int((i + 1) / n_frames * 100)
@@ -424,7 +427,7 @@ def generate_help_from_zones(cfg_path="zones.config"):
     for key, cfg in conf_map.items():
         pm = cfg.get("phone_model", "<unknown>")
         desc = cfg.get("description", "")
-        zones = cfg.get("zones", []) or []
+        zones = cfg.get("zones", []) or []      
         lines.append(f"  --{key}: {pm} - {desc} ({len(zones)} zones)")
     lines.append("\nExamples:")
     lines.append("  python musicViz.py --np1          # use np1 config")
