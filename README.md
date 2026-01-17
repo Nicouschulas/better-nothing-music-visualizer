@@ -35,7 +35,7 @@ It then outputs a **glyphed OGG** file for playback in *Glyph Composer*, *Glyphi
   - The audio
   - The synchronized Glyph animation
 
-## 📖 How to use ?
+## 📖 How to use?
 The usage is pretty simple and straightforward. Nevertheless, we made a detailed wiki page which explains the installation, usage, configuration files in detail and a troubleshooting section. You can also find out how to make new presets. [Just click here to see how to use **musicViz.py** as a python script](https://github.com/Aleks-Levet/better-nothing-music-visualizer/wiki/). You know what's cool? You can convert an unlimited number of files in bulk without any trouble!
 
 ### If you want to just try the visualisation and you don't know coding / you're lazy:
@@ -46,7 +46,7 @@ We have a **discord bot** that can easily run the script on any audio file for y
  * Wait a couple of seconds
  * And voilà! Just download the file and play it in *Glyph Composer* or *Glyphify*!
 
-### Our Music App (coming soon)
+### Our Music App (coming soon):
 We are working on a **Music App** that can easily run the script on any audio file for you! You will be able to toggle this function on or off with live music visualisation. The best part? It's very simple to use, you just need your phone and don't need to process it manually!
 
 **Features:**
