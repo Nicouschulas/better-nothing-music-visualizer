@@ -73,13 +73,20 @@ You want to talk or discuss? [Feel free to jump in and join us in the official d
 https://www.virustotal.com/gui/url/c92c1ff82b56eb60bfd1e159592d09f949f0ea2d195e01f7f5adbef0e0b0385b?nocache=1
 
 ## 🏗️ Contributing
-Contributions are very welcome! You can:
+Become an developer! Contributions are very welcome! You can:
 - Open issues
 - Submit pull requests
 - Suggest improvements
 - Experiment with new visualization ideas
 - Create new presets
 - Disscuss with the developpers
+
+### Developer list:
+Founder [Aleks-Levent](https://github.com/Aleks-Levet)
+Readme & Wiki [Nicouschulas](https://github.com/Nicouschulas)
+Discord Bot [Interlastic](https://github.com/Interlastic)
+Glyphmodder [SebiAi](https://github.com/SebiAi)
+[Earnedel-lab](https://github.com/Earendel-lab)
 
 ### <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Travel%20and%20places/Star.png" alt="Star" width="25" height="25" /> Star History
 ![Star History](https://api.star-history.com/svg?repos=Aleks-Levet/better-nothing-music-visualizer&type=Date)
