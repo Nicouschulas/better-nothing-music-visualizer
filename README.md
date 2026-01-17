@@ -3,7 +3,7 @@
 For a lot of people (including me), the *stock Glyph Music Visualiastion provided by Nothing* feels random.  
 Even if it technically isn’t, the visual response to music just isn’t very obvious. On top of that, the feature isn’t really using the full potential of the Glyph Interface. So that’s why I made my own music visualizer.
 
-## <img src="https://fonts.gstatic.com/s/e/notoemoji/latest/2696_fe0f/512.gif" alt="⚖" width="32" height="32">Stock vs Better Music Visualizer
+## <img src="https://fonts.gstatic.com/s/e/notoemoji/latest/2696_fe0f/512.gif" alt="⚖" width="32" height="32"> Stock vs Better Music Visualizer
 | Feature | Nothing Stock | **Better Music Visualizer** |
 | :--- | :--- | :--- |
 | **Light levels** | ~2-bit depth (3 light levels) | **12-bit depth (4096 light levels)** |
@@ -12,7 +12,7 @@ Even if it technically isn’t, the visual response to music just isn’t very o
 | **Zones** | Standard, full physical glyphs are used | **Each glyph segment and sub-zone is used and controlled independently** |
 | **Visualisation method** | Real-time only | **Realtime with 20ms latency, or pre-processed audio files** |
 
-## <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Musical%20Notes.png" alt="Musical Notes" width="25" height="25" /> <img src="https://fonts.gstatic.com/s/e/notoemoji/latest/1f3ac/512.gif" alt="🎬" width="25" height=""> Video demo (early version of the script)
+## <img src="https://fonts.gstatic.com/s/e/notoemoji/latest/1f3ac/512.gif" alt="🎬" width="25" height=""> Video demo (early version of the script)
 
 See the difference in action! Here’s a comparison between an **early version** of this script and *Nothing’s stock music visualizer*.
 Click below to watch the YouTube video:
@@ -35,7 +35,7 @@ It then outputs a **glyphed OGG** file for playback in *Glyph Composer*, *Glyphi
   - The audio
   - The synchronized Glyph animation
 
-# 📖 How to use ?
+## 📖 How to use?
 The usage is pretty simple and straightforward. Nevertheless, we made a detailed wiki page which explains the installation, usage, configuration files in detail and a troubleshooting section. You can also find out how to make new presets. [Just click here to see how to use **musicViz.py** as a python script](https://github.com/Aleks-Levet/better-nothing-music-visualizer/wiki/). You know what's cool? You can convert an unlimited number of files in bulk without any trouble!
 
 ### If you want to just try the visualisation and you don't know coding / you're lazy:
@@ -46,6 +46,15 @@ We have a **discord bot** that can easily run the script on any audio file for y
  * Wait a couple of seconds
  * And voilà! Just download the file and play it in *Glyph Composer* or *Glyphify*!
 
+### <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Musical%20Notes.png" alt="Musical Notes" width="25" height="25" /> Our Music App (coming soon):
+We are working on a **Music App** that can easily run the script on any audio file for you! You will be able to toggle this function on or off with live music visualisation. The best part? It's very simple to use, you just need your phone and don't need to process it manually!
+
+**Features:**
+- Nothing aesthetic
+- simple and fast
+- simply turn on/off music visualisation
+- offline and secure
+
 ## 📲 Supported Nothing Phone Models
 Currently these models are supported:
 - Nothing phone (1)
@@ -53,7 +62,8 @@ Currently these models are supported:
 - Nothing phone (2a plus)
 - Nothing phone (3a)
 - Nothing phone (3a pro)
-- Phone 2 support is coming soon!
+- Nothing phone (2) support is coming soon!
+- Nothing phone (3) support is coming soon!
 
 ## <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Hand%20gestures/Handshake.png" alt="Handshake" width="25" height="25" /> Join our community
 You want to talk or discuss? [Feel free to jump in and join us in the official discord thread in the Nothing server!](https://discord.com/channels/930878214237200394/1434923843239280743)
@@ -63,13 +73,20 @@ You want to talk or discuss? [Feel free to jump in and join us in the official d
 https://www.virustotal.com/gui/url/c92c1ff82b56eb60bfd1e159592d09f949f0ea2d195e01f7f5adbef0e0b0385b?nocache=1
 
 ## 🏗️ Contributing
-Contributions are very welcome! You can:
+Become an developer! Contributions are very welcome! You can:
 - Open issues
 - Submit pull requests
 - Suggest improvements
 - Experiment with new visualization ideas
 - Create new presets
 - Disscuss with the developpers
+
+### Developer list:
+- Founder [Aleks-Levent](https://github.com/Aleks-Levet)
+- Readme & Wiki [Nicouschulas](https://github.com/Nicouschulas)
+- Discord Bot [Interlastic](https://github.com/Interlastic)
+- Glyphmodder [SebiAi](https://github.com/SebiAi)
+- [Earnedel-lab](https://github.com/Earendel-lab)
 
 ### <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Travel%20and%20places/Star.png" alt="Star" width="25" height="25" /> Star History
 ![Star History](https://api.star-history.com/svg?repos=Aleks-Levet/better-nothing-music-visualizer&type=Date)
