@@ -82,11 +82,11 @@ Become an developer! Contributions are very welcome! You can:
 - Disscuss with the developpers
 
 ### Developer list:
-Founder [Aleks-Levent](https://github.com/Aleks-Levet)
-Readme & Wiki [Nicouschulas](https://github.com/Nicouschulas)
-Discord Bot [Interlastic](https://github.com/Interlastic)
-Glyphmodder [SebiAi](https://github.com/SebiAi)
-[Earnedel-lab](https://github.com/Earendel-lab)
+- Founder [Aleks-Levent](https://github.com/Aleks-Levet)
+- Readme & Wiki [Nicouschulas](https://github.com/Nicouschulas)
+- Discord Bot [Interlastic](https://github.com/Interlastic)
+- Glyphmodder [SebiAi](https://github.com/SebiAi)
+- [Earnedel-lab](https://github.com/Earendel-lab)
 
 ### <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Travel%20and%20places/Star.png" alt="Star" width="25" height="25" /> Star History
 ![Star History](https://api.star-history.com/svg?repos=Aleks-Levet/better-nothing-music-visualizer&type=Date)
