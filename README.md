@@ -92,7 +92,7 @@ Here are the people involved in this project:
 - [SebiAi](https://github.com/SebiAi) (Glyphmodder and glyph related help)
 - [Earnedel-lab](https://github.com/Earendel-lab) (Readme enhancements)
 - [Blobby](https://github.com/NightBlobby) (Dev from Voidware labs making the Music app)
-- 
+- [あけ なるかみ](https://github.com/Luke20YT) (Another dev from Voidware labs making the Music app)
 
 ### <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Travel%20and%20places/Star.png" alt="Star" width="25" height="25" /> Star History
 ![Star History](https://api.star-history.com/svg?repos=Aleks-Levet/better-nothing-music-visualizer&type=Date)
