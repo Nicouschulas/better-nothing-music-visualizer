@@ -61,11 +61,11 @@ Currently these models are supported:
 - Nothing phone (1)
 - Nothing phone (2a)
 - Nothing phone (2a plus)
+- Nothing phone (3)
 - Nothing phone (3a)
 - Nothing phone (3a pro)
 **Coming soon:**
 - *Nothing phone (2)*
-- *Nothing phone (3)*
 
 ## <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Hand%20gestures/Handshake.png" alt="Handshake" width="25" height="25" /> Join our community
 You want to talk or discuss? Bugs, feature requests? [Feel free to jump in and join us in the official discord thread in the Nothing server!](https://discord.com/channels/930878214237200394/1434923843239280743)
