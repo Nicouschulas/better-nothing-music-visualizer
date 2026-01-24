@@ -1,4 +1,5 @@
 # Here's how it looks like!
+## Click on the thumbnails to open the video in YouTube
 
 * First early version of the script on my Nothing phone 1, I compared side by side Nothing's visualisation and mine:
 [![Watch the video](https://img.youtube.com/vi/pQZAkEl7OqQ/0.jpg)](https://www.youtube.com/watch?v=pQZAkEl7OqQ)
