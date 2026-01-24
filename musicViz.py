@@ -182,7 +182,7 @@ def normalize_to_quadratic(raw):
     zone_max[zone_max == 0] = 1e-12
     scaled = raw / zone_max
     # quadratic mapping for emphasis on peaks
-    return (np.clip(scaled, 0, 1) ** 2 * 5000.0).astype(float)
+    return (scaled ** 2 * 5000.0).astype(float)
 
 # simple stable multiplier: use median of frame maxima
 def compute_stable_multiplier(linear, amp_conf):
@@ -200,33 +200,29 @@ def compute_stable_multiplier(linear, amp_conf):
     amp_max = float(amp_conf.get("max"))
     return float(max(amp_min, min(amp_max, mult)))
 
-# Apply one stable multiplier and perform simple instant-rise / smoothed-fall
-def apply_stable_and_smooth(linear, decay_alpha, amp_conf):
+# Apply decay to raw FFT values (instant rise, smoothed fall)
+def apply_decay_to_raw(raw, decay_alpha):
+    n_frames, n_zones = raw.shape
+    decayed = np.zeros_like(raw)
+    if n_frames == 0:
+        return decayed
+    prev = raw[0].copy()
+    decayed[0] = prev
+    for i in range(1, n_frames):
+        cur = raw[i]
+        # instant rise
+        prev = np.maximum(prev, cur)
+        # smoothed fall
+        prev = decay_alpha * prev + (1.0 - decay_alpha) * cur
+        decayed[i] = prev
+    return decayed
+
+# Apply stable multiplier without smoothing
+def apply_multiplier_only(linear, amp_conf):
     n_frames, n_zones = linear.shape
     mult = compute_stable_multiplier(linear, amp_conf)
     linear_scaled = linear * mult
-
-    # simple smoothing: instant rise, exponential-ish fall per-sample
-    rows = []
-    if n_frames == 0:
-        return np.zeros((0, n_zones), dtype=int)
-    prev = linear_scaled[0].copy()
-    rows.append(np.clip(np.round(prev), 0, 4095).astype(int))
-
-    tick = max(1, n_frames // 10)
-    for i in range(1, n_frames):
-        cur = linear_scaled[i]
-        rise = cur >= prev
-        # instant rise
-        prev[rise] = cur[rise]
-        # smoothed fall
-        prev[~rise] = decay_alpha * prev[~rise] + (1.0 - decay_alpha) * cur[~rise]
-        rows.append(np.clip(np.round(prev), 0, 4095).astype(int))
-        if (i + 1) % tick == 0 or i == n_frames - 1:
-            pct = int((i + 1) / n_frames * 100)
-            print(f"\r[PROCESSING] Smoothing everything: {pct}% ({i+1}/{n_frames})", end='', flush=True)
-    print()
-    return np.vstack(rows)
+    return linear_scaled  # return float, no clip yet
 
 # new helper: map per-zone brightness using optional zone[3]=low_percent and zone[4]=high_percent
 def apply_zone_percent_mapping(linear: np.ndarray, zones, linear_max: float = 5000.0) -> np.ndarray:
@@ -295,7 +291,7 @@ def apply_zone_percent_mapping(linear: np.ndarray, zones, linear_max: float = 50
     return out
 
 # ------------------ main processing ------------------
-def process(audio_path, conf, out_nglyph_path):
+def process(audio_path, conf, out_path, output_format='nglyph'):
     # --- config
      fps = 60  # FPS is fixed to 60 
      phone_model = conf.get("phone_model")
@@ -308,32 +304,51 @@ def process(audio_path, conf, out_nglyph_path):
  
      # compute raw matrix
      raw, n_frames = compute_raw_matrix(samples, sr, zones, fps)
-
+ 
      # normalize to quadratic linear 0..5000
      linear = normalize_to_quadratic(raw)
  
-    # apply per-zone percent mapping (optional zone[3], zone[4]) BEFORE smoothing
+     # apply stable multiplier
+     linear_scaled = apply_multiplier_only(linear, amp_conf)
+ 
+    # apply per-zone percent mapping (optional zone[3], zone[4]) on scaled values
      try:
-         linear = apply_zone_percent_mapping(linear, zones, linear_max=5000.0)
+         linear_scaled = apply_zone_percent_mapping(linear_scaled, zones, linear_max=4095.0)
      except Exception as e:
          print(f"[!] Warning: zone percent mapping failed: {e}")
   
-     # apply single-file stable multiplier + smoothing per-frame (realtime-capable)
-     final = apply_stable_and_smooth(linear, decay_alpha, amp_conf)
+     # apply decay to scaled brightness values
+     decayed_linear = apply_decay_to_raw(linear_scaled, decay_alpha)
  
-     # --- write NGlyph
-     author_rows = [",".join(map(str, row)) + "," for row in final]
-     ng = {
-         "VERSION": 1,
-         "PHONE_MODEL": phone_model,
-         "AUTHOR": author_rows,
-         "CUSTOM1": ["1-0", "1050-1"]
-     }
+     # clip to 0-4095
+     final = np.clip(np.round(decayed_linear), 0, 4095).astype(int)
  
-     with open(out_nglyph_path, "w", encoding="utf-8") as f:
-         json.dump(ng, f, indent=4)
-     print(f"[+] Saved NGlyph: {out_nglyph_path}")
-     return out_nglyph_path
+     # --- write output
+     if output_format == 'nglyph':
+         author_rows = [",".join(map(str, row)) + "," for row in final]
+         ng = {
+             "VERSION": 1,
+             "PHONE_MODEL": phone_model,
+             "AUTHOR": author_rows,
+             "CUSTOM1": ["1-0", "1050-1"]
+         }
+         with open(out_path, "w", encoding="utf-8") as f:
+             json.dump(ng, f, indent=4)
+         print(f"[+] Saved NGlyph: {out_path}")
+     elif output_format == 'csv':
+         import csv
+         with open(out_path, "w", newline='', encoding="utf-8") as f:
+             writer = csv.writer(f)
+             # Write phone model
+             writer.writerow([f"PHONE_MODEL: {phone_model}"])
+             # Write header
+             header = [f"zone_{i}" for i in range(final.shape[1])]
+             writer.writerow(header)
+             # Write rows
+             for row in final:
+                 writer.writerow(row)
+         print(f"[+] Saved CSV: {out_path}")
+     return out_path
 
 def run_glyphmodder_write(nglyph_path: str, ogg_path: str, title: Optional[str] = None, cwd: Optional[str] = None) -> str:
     if not isinstance(ogg_path, str) or not ogg_path:
@@ -419,7 +434,7 @@ def generate_help_from_zones(cfg_path="zones.config"):
     # only include entries that look like phone configs (dicts).  This filters out metadata like decay-alpha.
     conf_map = {k: v for k, v in raw.items() if k != "amp" and isinstance(v, dict)}
     lines = []
-    lines.append("Usage: python musicViz.py [--update] [--nglyph] [--np1|--np1s|--np2|--np2a|--np3a]\n")
+    lines.append("Usage: python musicViz.py [--update] [--nglyph] [--csv] [--np1|--np1s|--np2|--np2a|--np3a]\n")
     lines.append(f"Available configs (from {cfg_path}):")
     for key, cfg in conf_map.items():
         pm = cfg.get("phone_model", "<unknown>")
@@ -429,6 +444,7 @@ def generate_help_from_zones(cfg_path="zones.config"):
     lines.append("\nExamples:")
     lines.append("  python musicViz.py --np1          # use np1 config")
     lines.append("  python musicViz.py --np1 --nglyph  # only generate an nglyph file using np1 config")
+    lines.append("  python musicViz.py --np1 --csv     # only generate a csv file with zone brightnesses using np1 config")
     lines.append("  python musicViz.py --np1s --update  # update GlyphModder.py and run")
     return "\n".join(lines)
 
@@ -454,15 +470,14 @@ def validate_amp_conf(amp_conf):
 
 
 # ---------------- api ------------------
-# Relies on the standard pipeline: compute_raw_matrix -> normalize_to_quadratic -> apply_stable_and_smooth
+# Relies on the standard pipeline: compute_raw_matrix -> normalize_to_quadratic -> apply_multiplier_only -> apply_zone_percent_mapping -> apply_decay_to_raw -> clip
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 class GlyphVisualizerAPI:
     """
     Simplified API for generating Nothing Phone glyph visualizer OGG files.
-    Uses the main processing pipeline from this module. Adaptive zoom and
-    per-frame thresholding removed for simplicity and speed.
+    Uses the main processing pipeline from this module.
     """
 
     def __init__(self, zones_config_path: str = None):
@@ -520,7 +535,7 @@ class GlyphVisualizerAPI:
             raise ValueError("Configuration missing 'zones' array")
         return conf
 
-    def _process_audio(self, audio_path: str, conf: dict, out_nglyph_path: str) -> str:
+    def _process_audio(self, audio_path: str, conf: dict, out_path: str, output_format: str = 'nglyph') -> str:
         """
         Process audio using the standard pipeline and write .nglyph.
         This function avoids extra per-frame Python loops for postprocessing.
@@ -534,13 +549,15 @@ class GlyphVisualizerAPI:
         samples, sr = load_audio_mono(audio_path)
         raw, n_frames = compute_raw_matrix(samples, sr, zones, fps)
 
-        # Vectorized normalization + smoothing pipeline
+        # Vectorized normalization + multiplier + decay pipeline
         linear = normalize_to_quadratic(raw)  # float matrix
+        linear_scaled = apply_multiplier_only(linear, amp_conf)
         try:
-            linear = apply_zone_percent_mapping(linear, zones, linear_max=5000.0)
+            linear_scaled = apply_zone_percent_mapping(linear_scaled, zones, linear_max=4095.0)
         except Exception as e:
             print(f"[!] Warning: zone percent mapping failed in API: {e}")
-        final = apply_stable_and_smooth(linear, decay_alpha, amp_conf)  # int matrix
+        decayed_linear = apply_decay_to_raw(linear_scaled, decay_alpha)
+        final = np.clip(np.round(decayed_linear), 0, 4095).astype(int)
 
         # --- write NGlyph
         author_rows = [",".join(map(str, row)) + "," for row in final]
@@ -630,7 +647,7 @@ def generate_glyph_ogg(
 
 
 
-# ------------------ entrypoint ------------------
+# ------------------ entrypoint -----------------+-+-+-+-+-+-+-+-+-*-*-*-*-*-*-*-*-/*/*/*/*/*///
 if __name__ == "__main__":
     # if script called with no args, show help generated from zones.config
     if len(sys.argv) == 1:
@@ -652,8 +669,16 @@ if __name__ == "__main__":
         sys.argv = [a for a in sys.argv if a != "--nglyph"]
         print("[+] Running in --nglyph mode: will only generate .nglyph files (no audio conversion, no GlyphModder).")
 
+    # accept --csv flag: only produce .csv files with zone brightnesses, skip conversion and GlyphModder
+    csv_only = False
+    if "--csv" in sys.argv:
+        csv_only = True
+        sys.argv = [a for a in sys.argv if a != "--csv"]
+        print("[+] Running in --csv mode: will only generate .csv files with zone brightnesses (no audio conversion, no GlyphModder).")
+
     # determine selected phone config
-    selected_phone_key = "np1" # default to "np1" when no --np flag provided
+    selected_phone_key = None  # default to None, will choose later
+    user_specified = False
     # look for any CLI args beginning with "--np" (last one wins)
     # ignore the script name at sys.argv[0]
     cli_args = sys.argv[1:]
@@ -662,6 +687,7 @@ if __name__ == "__main__":
         if np_flags:
             # map "--np1s" -> "np1s"
             selected_phone_key = np_flags[-1].lstrip("-")
+            user_specified = True
 
     # Attempt to pull GlyphModder.py into cwd if --update was requested
     if update_flag:
@@ -726,8 +752,12 @@ if __name__ == "__main__":
 
     conf = conf_map.get(selected_phone_key)
     if conf is None:
-        print(f"[!] Requested config '{selected_phone_key}' not found in zones.config. Falling back to first available config.")
-        conf = conf_map[next(iter(conf_map.keys()))]
+        if user_specified:
+            print(f"[!] Requested config '{selected_phone_key}' not found in zones.config. Run the script without arguments to see available configs.")
+            sys.exit(1)
+        else:
+            print(f"[!] Default config '{selected_phone_key}' not found in zones.config. Falling back to first available config.")
+            conf = conf_map[next(iter(conf_map.keys()))]
 
     # use per-phone amp if present, otherwise use global amp (do NOT create defaults)
     amp_conf = conf.get("amp") if conf.get("amp") is not None else global_amp
@@ -775,16 +805,18 @@ if __name__ == "__main__":
         if not os.path.isfile(in_path):
             continue
         base = os.path.splitext(os.path.basename(fname))[0]
-        out_nglyph = os.path.join(nglyph_dir, base + ".nglyph")   # save nglyph file under Nglyph/
+        output_format = 'csv' if csv_only else 'nglyph'
+        ext = '.csv' if csv_only else '.nglyph'
+        out_path = os.path.join(nglyph_dir, base + ext)   # save file under Nglyph/
         desired_final_ogg = os.path.abspath(os.path.join(output_dir, base + ".ogg"))
         print(f"[+] Processing '{fname}'...")
         final_ogg = None
-        # produce the nglyph file
-        nglyph_path = process(in_path, conf, out_nglyph)
-        if not nglyph_only:
+        # produce the output file
+        output_file = process(in_path, conf, out_path, output_format)
+        if not nglyph_only and not csv_only:
             # Convert input audio to OGG in output directory first
             source_ogg = convert_to_ogg(in_path, desired_final_ogg)
-            final_ogg = run_glyphmodder_write(nglyph_path, source_ogg, conf.get("title"), cwd=os.path.abspath(output_dir))
+            final_ogg = run_glyphmodder_write(output_file, source_ogg, conf.get("title"), cwd=os.path.abspath(output_dir))
             
             # GlyphModder may create _fixed_composed.ogg or _composed.ogg depending on whether audio fix was needed
             # Find the actual composed file and rename it to the clean final name
@@ -813,6 +845,7 @@ if __name__ == "__main__":
                         print(f"[+] Cleaned up {intermediate}")
             else:
                 print(f"[!] Warning: Could not find composed output file for {base}")
+        print("-/--/---/----/-----/------/-------/--------/---------/----------/")
         processed += 1
-    print("-/-/-/-/-/-/-/-/-/-/-/-/-/-/-")
+    print("-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-")
     print(f"Done! Processed {processed} file(s) in total. Find them in the output folder!")
