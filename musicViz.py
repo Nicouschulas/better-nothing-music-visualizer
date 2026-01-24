@@ -74,7 +74,7 @@ def convert_to_ogg(input_path, output_path):
     # append any user-specified extra ffmpeg args
     cmd += list(extra)
     cmd += [output_path]
-    print(f"[+] Converting with ffmpeg: {' '.join(cmd)}")
+    print(f"[+] Converting with ffmpeg...")
     res = subprocess.run(cmd, capture_output=True, text=True)
     if res.returncode != 0:
         print(res.stdout)
@@ -131,11 +131,10 @@ def compute_raw_matrix(samples, sr, zones, fps):
     nfft = next_pow2(win_len)
     freqs = rfftfreq(nfft, 1 / sr)
     n_frames = int(np.ceil(len(samples) / hop))
-    print(f"[+] compute_raw_matrix: sr={sr}, hop={hop}, win={win_len}, nfft={nfft}, frames={n_frames}")
     raw = np.zeros((n_frames, len(zones)), dtype=float)
 
-    # light progress: print at roughly 10% increments
-    tick = max(1, n_frames // 10)
+    # light progress: cooldown ticks
+    tick = max(1, n_frames // 500)
 
     for i in range(n_frames):
         start = i * hop
@@ -173,7 +172,7 @@ def compute_raw_matrix(samples, sr, zones, fps):
 
         if (i + 1) % tick == 0 or i == n_frames - 1:
             pct = int((i + 1) / n_frames * 100)
-            print(f"\r[FFT] {pct}% ({i+1}/{n_frames})", end='', flush=True)
+            print(f"\r[FFT] Analysing frequencies: {pct}% ({i+1}/{n_frames})", end='', flush=True)
     print()  # newline after progress
     return raw, n_frames
 
@@ -205,7 +204,6 @@ def compute_stable_multiplier(linear, amp_conf):
 def apply_stable_and_smooth(linear, decay_alpha, amp_conf):
     n_frames, n_zones = linear.shape
     mult = compute_stable_multiplier(linear, amp_conf)
-    print(f"[+] stable multiplier: {mult:.3f}")
     linear_scaled = linear * mult
 
     # simple smoothing: instant rise, exponential-ish fall per-sample
@@ -226,7 +224,7 @@ def apply_stable_and_smooth(linear, decay_alpha, amp_conf):
         rows.append(np.clip(np.round(prev), 0, 4095).astype(int))
         if (i + 1) % tick == 0 or i == n_frames - 1:
             pct = int((i + 1) / n_frames * 100)
-            print(f"\r[PROC] {pct}% ({i+1}/{n_frames})", end='', flush=True)
+            print(f"\r[PROCESSING] Smoothing everything: {pct}% ({i+1}/{n_frames})", end='', flush=True)
     print()
     return np.vstack(rows)
 
@@ -293,7 +291,7 @@ def apply_zone_percent_mapping(linear: np.ndarray, zones, linear_max: float = 50
         out[above, zi] = float(linear_max)
         if np.any(between):
             out[between, zi] = ((percents[between] - low) / (high - low)) * float(linear_max)
-
+    print("[+] Processed progressbar zone percent mapping.")
     return out
 
 # ------------------ main processing ------------------
@@ -310,8 +308,7 @@ def process(audio_path, conf, out_nglyph_path):
  
      # compute raw matrix
      raw, n_frames = compute_raw_matrix(samples, sr, zones, fps)
-     print(f"[+] sr={sr}, frames={n_frames}")
- 
+
      # normalize to quadratic linear 0..5000
      linear = normalize_to_quadratic(raw)
  
@@ -360,15 +357,17 @@ def run_glyphmodder_write(nglyph_path: str, ogg_path: str, title: Optional[str] 
         raise ValueError("Computed arg_ogg is not a valid string")
 
     cmd = [sys.executable, glyphmodder_path, "write", "--auto-fix-audio", "-t", title, arg_nglyph, arg_ogg]
-    print("[+] Running GlyphModder:", " ".join(cmd), f"(cwd={cwd or os.getcwd()})")
+    #print("[+] Running GlyphModder:", " ".join(cmd), f"(cwd={cwd or os.getcwd()})")
+    print("[+] Running GlyphModder...")
     res = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd)
     if res.returncode != 0:
         print(res.stdout)
         print(res.stderr)
         raise RuntimeError("GlyphModder failed")
-    # final ogg should be written into cwd (if provided) or current working dir
+    # final ogg should be written into cwd (if provided)
     final_ogg_path = os.path.join(cwd or os.getcwd(), arg_ogg) if cwd else os.path.abspath(arg_ogg)
-    print(f"[+] GlyphModder produced: {final_ogg_path}")
+    #print(f"[+] GlyphModder produced: {final_ogg_path}")
+    print(f"[+] GlyphModder done!")
     return final_ogg_path
 
 # new helper: ensure GlyphModder.py exists in current directory (download from SebiAI if needed)
@@ -454,10 +453,7 @@ def validate_amp_conf(amp_conf):
     return coerced
 
 
-
-
 # ---------------- api ------------------
-# Lightweight, efficient API: removed adaptive zoom and threshold machinery.
 # Relies on the standard pipeline: compute_raw_matrix -> normalize_to_quadratic -> apply_stable_and_smooth
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -762,10 +758,11 @@ if __name__ == "__main__":
             sys.exit(1)
     else:
         try:
-            conf["decay_alpha"] = float(conf["decay_alpha"])
+            conf["decay_alpha"] = float(conf["decay-alpha"])
         except Exception:
-            print("[!] Invalid 'decay_alpha' value in phone config; it must be numeric.")
+            print("[!] Invalid 'decay-alpha' value in phone config; it must be numeric.")
             sys.exit(1)
+    print("Decay value used: " + str(conf["decay_alpha"]))
 
     files = sorted(os.listdir(input_dir))
     if not files:
@@ -780,7 +777,7 @@ if __name__ == "__main__":
         base = os.path.splitext(os.path.basename(fname))[0]
         out_nglyph = os.path.join(nglyph_dir, base + ".nglyph")   # save nglyph file under Nglyph/
         desired_final_ogg = os.path.abspath(os.path.join(output_dir, base + ".ogg"))
-        print(f"[+] Processing '{fname}' -> nglyph:'{out_nglyph}' -> final:'{desired_final_ogg}'")
+        print(f"[+] Processing '{fname}'...")
         final_ogg = None
         # produce the nglyph file
         nglyph_path = process(in_path, conf, out_nglyph)
