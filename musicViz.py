@@ -348,6 +348,23 @@ def process(audio_path, conf, out_path, output_format='nglyph'):
              for row in final:
                  writer.writerow(row)
          print(f"[+] Saved CSV: {out_path}")
+     elif output_format == 'compact':
+         # .musicviz binary format:
+         # - Text header: "PHONE_MODEL: <model>\n"
+         # - Binary: uint32 n_frames, uint32 n_zones
+         # - Binary: n_frames * n_zones uint16 brightness values (0-4095)
+         # Very space efficient for storage.
+         with open(out_path, "wb") as f:
+             # Write header as text
+             header = f"PHONE_MODEL: {phone_model}\n"
+             f.write(header.encode('utf-8'))
+             # Write dimensions and binary data
+             n_frames, n_zones = final.shape
+             import struct
+             f.write(struct.pack('II', n_frames, n_zones))
+             final_bytes = final.astype(np.uint16).tobytes()
+             f.write(final_bytes)
+         print(f"[+] Saved Compact: {out_path}")
      return out_path
 
 def run_glyphmodder_write(nglyph_path: str, ogg_path: str, title: Optional[str] = None, cwd: Optional[str] = None) -> str:
@@ -434,7 +451,7 @@ def generate_help_from_zones(cfg_path="zones.config"):
     # only include entries that look like phone configs (dicts).  This filters out metadata like decay-alpha.
     conf_map = {k: v for k, v in raw.items() if k != "amp" and isinstance(v, dict)}
     lines = []
-    lines.append("Usage: python musicViz.py [--update] [--nglyph] [--csv] [--np1|--np1s|--np2|--np2a|--np3a]\n")
+    lines.append("Usage: python musicViz.py [--update] [--nglyph] [--csv] [--compact] [--np1|--np1s|--np2|--np2a|--np3a]\n")
     lines.append(f"Available configs (from {cfg_path}):")
     for key, cfg in conf_map.items():
         pm = cfg.get("phone_model", "<unknown>")
@@ -445,6 +462,7 @@ def generate_help_from_zones(cfg_path="zones.config"):
     lines.append("  python musicViz.py --np1          # use np1 config")
     lines.append("  python musicViz.py --np1 --nglyph  # only generate an nglyph file using np1 config")
     lines.append("  python musicViz.py --np1 --csv     # only generate a csv file with zone brightnesses using np1 config")
+    lines.append("  python musicViz.py --np1 --compact # only generate a compact .musicviz file with zone brightnesses using np1 config (binary format)")
     lines.append("  python musicViz.py --np1s --update  # update GlyphModder.py and run")
     return "\n".join(lines)
 
@@ -676,6 +694,13 @@ if __name__ == "__main__":
         sys.argv = [a for a in sys.argv if a != "--csv"]
         print("[+] Running in --csv mode: will only generate .csv files with zone brightnesses (no audio conversion, no GlyphModder).")
 
+    # accept --compact flag: only produce .musicviz files with zone brightnesses in binary format, skip conversion and GlyphModder
+    compact_only = False
+    if "--compact" in sys.argv:
+        compact_only = True
+        sys.argv = [a for a in sys.argv if a != "--compact"]
+        print("[+] Running in --compact mode: will only generate .musicviz files with zone brightnesses in binary format (no audio conversion, no GlyphModder).")
+
     # determine selected phone config
     selected_phone_key = None  # default to None, will choose later
     user_specified = False
@@ -805,15 +830,22 @@ if __name__ == "__main__":
         if not os.path.isfile(in_path):
             continue
         base = os.path.splitext(os.path.basename(fname))[0]
-        output_format = 'csv' if csv_only else 'nglyph'
-        ext = '.csv' if csv_only else '.nglyph'
+        if compact_only:
+            output_format = 'compact'
+            ext = '.musicviz'
+        elif csv_only:
+            output_format = 'csv'
+            ext = '.csv'
+        else:
+            output_format = 'nglyph'
+            ext = '.nglyph'
         out_path = os.path.join(nglyph_dir, base + ext)   # save file under Nglyph/
         desired_final_ogg = os.path.abspath(os.path.join(output_dir, base + ".ogg"))
         print(f"[+] Processing '{fname}'...")
         final_ogg = None
         # produce the output file
         output_file = process(in_path, conf, out_path, output_format)
-        if not nglyph_only and not csv_only:
+        if not nglyph_only and not csv_only and not compact_only:
             # Convert input audio to OGG in output directory first
             source_ogg = convert_to_ogg(in_path, desired_final_ogg)
             final_ogg = run_glyphmodder_write(output_file, source_ogg, conf.get("title"), cwd=os.path.abspath(output_dir))
