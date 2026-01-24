@@ -80,7 +80,7 @@ def convert_to_ogg(input_path, output_path):
         print(res.stdout)
         print(res.stderr)
         raise RuntimeError(f"ffmpeg conversion failed for {input_path}")
-    print(f"[+] Conversion complete: {output_path}")
+    print(f"[+] Conversion complete!")
     return output_path
 
 def load_audio_mono(path):
@@ -803,7 +803,7 @@ if __name__ == "__main__":
                 # Rename to clean final name
                 os.rename(composed_file, desired_final_ogg)
                 final_ogg = desired_final_ogg
-                print(f"[+] Produced {final_ogg}")
+                print(f"[+] Finished this file!")
                 
                 # Clean up intermediate files (_fixed.ogg, original converted ogg if different)
                 for suffix in ["_fixed.ogg"]:
