@@ -20,6 +20,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """
 
+# VERSION 1.0.0 OF THE SCRIPT.
+
 import os, sys, json, subprocess
 import numpy as np
 from scipy.fft import rfft, rfftfreq
